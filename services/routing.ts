@@ -18,7 +18,8 @@ interface RouteResult {
  */
 export const getOptimizedRoute = async (
   userLocation: { latitude: number; longitude: number } | null,
-  places: Coordinate[]
+  places: Coordinate[],
+  mode: 'foot' | 'driving' | 'bike' = 'foot'
 ): Promise<RouteResult> => {
   if (places.length === 0) {
     return { success: false, error: 'No places provided' };
@@ -50,13 +51,21 @@ export const getOptimizedRoute = async (
       };
     }
 
-    // Use OSRM route endpoint to respect the exact order of waypoints
-    // (Unlike /trip which reorders for optimization)
-    const url = `https://router.project-osrm.org/route/v1/driving/${coords.join(';')}?overview=full&geometries=geojson`;
+    // Try walking profile first, fall back to driving if not available
+    // The public OSRM server may only support driving
+    let url = `https://router.project-osrm.org/route/v1/${mode}/${coords.join(';')}?overview=full&geometries=geojson`;
     
     console.log('Fetching route from OSRM:', url);
     
-    const response = await fetch(url);
+    let response = await fetch(url);
+    
+    // If foot/bike profile fails, fall back to driving for route geometry
+    // (We calculate walking time from distance anyway)
+    if (!response.ok && mode !== 'driving') {
+      console.log(`${mode} profile not available, falling back to driving route geometry`);
+      url = `https://router.project-osrm.org/route/v1/driving/${coords.join(';')}?overview=full&geometries=geojson`;
+      response = await fetch(url);
+    }
     
     if (!response.ok) {
       console.error('OSRM error:', response.status);
@@ -84,11 +93,21 @@ export const getOptimizedRoute = async (
       })
     );
 
+    const distance = route.distance; // meters
+    
+    // ALWAYS calculate walking time from distance for this walking tour app
+    // OSRM public server only supports driving, so we use route geometry but calculate our own time
+    // Average walking speed: ~5 km/h = ~1.4 m/s (includes some buffer for crossings, stairs, etc.)
+    const WALKING_SPEED_MS = 1.2; // meters per second (~4.3 km/h, realistic urban walking pace)
+    const duration = distance / WALKING_SPEED_MS;
+    
+    console.log(`Walking route: ${(distance / 1000).toFixed(2)}km, estimated ${Math.round(duration / 60)} minutes`);
+
     return {
       success: true,
       coordinates: routeCoordinates,
-      duration: route.duration, // seconds
-      distance: route.distance, // meters
+      duration, // seconds (calculated walking time)
+      distance, // meters
     };
   } catch (error) {
     console.error('Routing error:', error);

@@ -71,7 +71,7 @@ const GUIDE_CATEGORIES: Record<string, string[]> = {
     '4bf58dd8d48988d1ca941735', // Pizzeria
     '4bf58dd8d48988d1ce941735', // Seafood Restaurant
   ],
-  adventurer: [
+  adventure: [
     '4d4b7105d754a06377d81259', // Landmarks and Outdoors
     '4bf58dd8d48988d1e2941735', // Beach
     '4bf58dd8d48988d1e4941735', // Campground
@@ -86,6 +86,72 @@ const GUIDE_CATEGORIES: Record<string, string[]> = {
     '4f4528bc4b90abdf24c9de85', // Sports and Recreation
     '4bf58dd8d48988d1e3941735', // Surf Spot
     '4bf58dd8d48988d1e9941735', // Ski Resort and Area
+  ],
+  tech_guru: [
+    '4bf58dd8d48988d125941735', // Tech Startup
+    '4bf58dd8d48988d174941735', // Coworking Space
+    '4bf58dd8d48988d191941735', // Science Museum
+    '4bf58dd8d48988d181941735', // Museum
+    '4bf58dd8d48988d127941735', // Conference Room
+    '52e81612bcbc57f1066b79f1', // Convention Center
+    '4bf58dd8d48988d1ff931735', // Auditorium
+  ],
+  architect: [
+    '4bf58dd8d48988d12d941735', // Monument
+    '4bf58dd8d48988d132941735', // Church
+    '4bf58dd8d48988d166941735', // Plaza
+    '4bf58dd8d48988d1cb941735', // Bridge
+    '4bf58dd8d48988d130941735', // Building
+    '4bf58dd8d48988d181941735', // Museum
+    '4deefb944765f83613cdba6e', // Historic Site
+    '4bf58dd8d48988d165941735', // Scenic Lookout
+    '52e81612bcbc57f1066b7a21', // National Park
+  ],
+  night_owl: [
+    '4d4b7105d754a06376d81259', // Nightlife Spot
+    '4bf58dd8d48988d116941735', // Bar
+    '4bf58dd8d48988d121941735', // Lounge
+    '4bf58dd8d48988d11f941735', // Nightclub
+    '4bf58dd8d48988d1d8941735', // Cocktail Bar
+    '4bf58dd8d48988d117941735', // Beer Garden
+    '4bf58dd8d48988d1e5931735', // Music Venue
+    '4bf58dd8d48988d1e9931735', // Rock Club
+    '4bf58dd8d48988d1e7931735', // Jazz Club
+    '4bf58dd8d48988d18e941735', // Comedy Club
+    '4bf58dd8d48988d1e8931735', // Karaoke Box
+  ],
+  artist: [
+    '4bf58dd8d48988d18f941735', // Art Museum
+    '4bf58dd8d48988d1e2931735', // Art Gallery
+    '507c8c4091d498d9fc8c67a9', // Street Art
+    '4bf58dd8d48988d1f2931735', // Performing Arts Venue
+    '4bf58dd8d48988d131941735', // Design Studio
+    '4bf58dd8d48988d1f4931735', // Concert Hall
+    '52e81612bcbc57f1066b79e8', // Public Art
+    '4bf58dd8d48988d181941735', // Museum
+  ],
+  local_oddball: [
+    '4bf58dd8d48988d181941735', // Museum
+    '4bf58dd8d48988d12f941735', // Theme Park
+    '52e81612bcbc57f1066b7a25', // Sculpture Garden
+    '4bf58dd8d48988d1e2931735', // Art Gallery
+    '5032792091d4c4b30a586d5c', // Antique Shop
+    '4bf58dd8d48988d128941735', // Gift Shop
+    '52f2ab2ebcbc57f1066b8b18', // Spiritual Center
+    '4bf58dd8d48988d166941735', // Plaza
+  ],
+  sports_buff: [
+    '4bf58dd8d48988d184941735', // Stadium
+    '4bf58dd8d48988d18c941735', // Baseball Stadium
+    '4bf58dd8d48988d18b941735', // Basketball Stadium
+    '4bf58dd8d48988d18a941735', // Football Stadium
+    '4bf58dd8d48988d189941735', // Hockey Arena
+    '4bf58dd8d48988d188941735', // Soccer Stadium
+    '4bf58dd8d48988d1e1941735', // Tennis Stadium
+    '4bf58dd8d48988d1e6941735', // Golf Course
+    '4f4528bc4b90abdf24c9de85', // Sports and Recreation
+    '4bf58dd8d48988d175941735', // Gym
+    '52e81612bcbc57f1066b7a2e', // Sports Bar
   ],
 };
 
