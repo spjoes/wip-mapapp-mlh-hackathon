@@ -492,3 +492,106 @@ export const formatPlacesForAI = (places: PlaceResult[]): string => {
 
   return placesList;
 };
+
+/**
+ * Geocode a place name + city to get accurate coordinates using Nominatim (OpenStreetMap)
+ * This is free and doesn't require an API key
+ */
+export interface GeocodedPlace {
+  name: string;
+  lat: number;
+  lng: number;
+  address?: string;
+  found: boolean;
+}
+
+export const geocodePlace = async (
+  placeName: string,
+  city: string = 'San Francisco'
+): Promise<GeocodedPlace | null> => {
+  try {
+    // Try searching with place name + city
+    const query = encodeURIComponent(`${placeName}, ${city}`);
+    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&addressdetails=1`;
+    
+    console.log(`Geocoding: "${placeName}" in ${city}`);
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'DetourApp/1.0', // Required by Nominatim
+      },
+    });
+
+    if (!response.ok) {
+      console.error('Nominatim error:', response.status);
+      return null;
+    }
+
+    const results = await response.json();
+    
+    if (results.length > 0) {
+      const result = results[0];
+      console.log(`  Found: ${result.display_name} at ${result.lat}, ${result.lon}`);
+      return {
+        name: placeName,
+        lat: parseFloat(result.lat),
+        lng: parseFloat(result.lon),
+        address: result.display_name,
+        found: true,
+      };
+    }
+
+    console.log(`  Not found for "${placeName}"`);
+    return null;
+  } catch (error) {
+    console.error('Geocoding error:', error);
+    return null;
+  }
+};
+
+/**
+ * Geocode multiple places with rate limiting to respect Nominatim's usage policy
+ * Nominatim requires 1 second between requests
+ */
+export const geocodePlaces = async (
+  places: Array<{ name: string; lat?: number; lng?: number; description?: string; price?: string; duration?: string }>,
+  city: string = 'San Francisco'
+): Promise<Array<{ name: string; description: string; lat: number; lng: number; price: string; duration: string; geocoded: boolean }>> => {
+  const results: Array<{ name: string; description: string; lat: number; lng: number; price: string; duration: string; geocoded: boolean }> = [];
+  
+  for (let i = 0; i < places.length; i++) {
+    const place = places[i];
+    
+    // Add delay between requests (Nominatim rate limit)
+    if (i > 0) {
+      await new Promise(resolve => setTimeout(resolve, 1100)); // 1.1 seconds
+    }
+    
+    const geocoded = await geocodePlace(place.name, city);
+    
+    if (geocoded && geocoded.found) {
+      results.push({
+        name: place.name,
+        description: place.description || '',
+        lat: geocoded.lat,
+        lng: geocoded.lng,
+        price: place.price || '$',
+        duration: place.duration || '1 hour',
+        geocoded: true,
+      });
+    } else {
+      // Fall back to AI's coordinates if geocoding fails
+      results.push({
+        name: place.name,
+        description: place.description || '',
+        lat: place.lat || 0,
+        lng: place.lng || 0,
+        price: place.price || '$',
+        duration: place.duration || '1 hour',
+        geocoded: false,
+      });
+    }
+  }
+  
+  return results;
+};
