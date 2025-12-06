@@ -132,10 +132,16 @@ IMPORTANT RULES:
 - Return ONLY the narration text - no JSON, no quotes, no formatting`;
 
   try {
+    console.log('Generating AI narration for:', placeName);
+    console.log('Step data:', JSON.stringify(step, null, 2));
+    
     const response = await sendAgentMessage(
       'You are a passionate local tour guide with deep knowledge of destinations. You ALWAYS use web_search to look up accurate, detailed information before speaking. You share stories engagingly, like talking to a friend you want to impress with your knowledge.',
       prompt
     );
+
+    console.log('AI response success:', response.success);
+    console.log('AI response message length:', response.message?.length || 0);
 
     if (response.success && response.message) {
       // Clean up the response - remove any JSON formatting if present
@@ -159,14 +165,27 @@ IMPORTANT RULES:
       } catch {
         // Not JSON, use as-is
       }
+      
+      console.log('Final narration length:', narration.length);
+      console.log('Narration preview:', narration.substring(0, 200) + '...');
+      
+      // If narration is too short, it might be a failure - use fallback
+      if (narration.length < 100) {
+        console.log('Narration too short, using enhanced fallback');
+        return generateEnhancedFallbackNarration(step, placeNumber);
+      }
+      
       return narration;
+    } else {
+      console.log('AI response failed:', response.error);
     }
   } catch (error) {
     console.error('AI narration generation failed:', error);
   }
 
-  // Fallback to simple narration if AI fails
-  return generatePlaceNarrationScript(step, placeNumber);
+  // Fallback to enhanced narration if AI fails
+  console.log('Using fallback narration');
+  return generateEnhancedFallbackNarration(step, placeNumber);
 };
 
 /**
@@ -184,6 +203,61 @@ export const generatePlaceNarrationScript = (step: JourneyStep, placeNumber: num
   } else {
     return `Now we're at ${placeName}. Enjoy discovering what this place has to offer!`;
   }
+};
+
+/**
+ * Enhanced fallback narration that uses all available context
+ */
+export const generateEnhancedFallbackNarration = (step: JourneyStep, placeNumber: number): string => {
+  if (step.type !== 'place' || !step.place) {
+    return '';
+  }
+  
+  const { name, description, duration, price } = step.place;
+  const funFacts = step.funFacts || [];
+  const connectionToNext = step.connectionToNext;
+  
+  const parts: string[] = [];
+  
+  // Welcome
+  if (placeNumber === 1) {
+    parts.push(`Welcome to your first destination, ${name}!`);
+  } else {
+    parts.push(`Now let's explore ${name}, stop number ${placeNumber} on your journey.`);
+  }
+  
+  // Description
+  if (description) {
+    parts.push(`This is ${description.toLowerCase()}.`);
+  }
+  
+  // Duration and price context
+  parts.push(`Plan to spend about ${duration} here.`);
+  if (price && price !== 'Free') {
+    parts.push(`Budget-wise, expect to spend around ${price}.`);
+  } else if (price === 'Free') {
+    parts.push(`The great news is that entry is free!`);
+  }
+  
+  // Fun facts
+  if (funFacts.length > 0) {
+    parts.push(`Here's what makes this place special:`);
+    funFacts.forEach((fact, index) => {
+      if (index < 3) { // Limit to 3 facts
+        parts.push(fact);
+      }
+    });
+  }
+  
+  // Connection to next
+  if (connectionToNext) {
+    parts.push(connectionToNext);
+  }
+  
+  // Closing
+  parts.push(`Take your time to soak in the atmosphere and enjoy everything this place has to offer. When you're ready, we'll continue to the next stop.`);
+  
+  return parts.join(' ');
 };
 
 /**
@@ -413,3 +487,4 @@ export const isAudioPlaying = async (): Promise<boolean> => {
     return false;
   }
 };
+
