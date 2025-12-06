@@ -60,8 +60,8 @@ export const sendAgentMessage = async (
       body: JSON.stringify({
         messages,
         stream: false,
-        include_functions_info: false,
-        include_retrieval_info: false,
+        include_functions_info: true,  // Enable tool/function usage
+        include_retrieval_info: true,  // Include retrieval info if agent has knowledge base
         include_guardrails_info: false,
       }),
     });

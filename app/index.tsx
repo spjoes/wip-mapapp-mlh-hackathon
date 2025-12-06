@@ -184,11 +184,14 @@ export default function HomeScreen() {
   const [journeyContent, setJourneyContent] = useState<JourneyContent | null>(null);
   const [isGeneratingJourney, setIsGeneratingJourney] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  
+  // Planning UI state - when false and itinerary has items, show simplified 2-button view
+  const [showPlanningUI, setShowPlanningUI] = useState(true);
 
   // Snap points for the bottom sheet
   // Planning mode: max 65% (half screen), Journey mode: can go to 90%
   const snapPoints = useMemo(() => 
-    isJourneyMode ? ['38%', '65%', '90%'] : ['38%', '65%'], 
+    isJourneyMode ? ['38%', '65%', '90%'] : ['50%', '65%'], 
     [isJourneyMode]
   );
 
@@ -392,6 +395,9 @@ export default function HomeScreen() {
     setShowResponseModal(false);
     setSelectedPlaces(new Set());
     setAgentResponse(null);
+    
+    // Switch to simplified view after adding places
+    setShowPlanningUI(false);
   };
 
   const handleRetry = () => {
@@ -418,9 +424,15 @@ export default function HomeScreen() {
 
 ${placesDescription}
 
+CRITICAL REQUIREMENT: You MUST use your web_search tool to look up EACH place in the itinerary BEFORE writing any fun facts. Do NOT rely on your training data - search for current, accurate information about each location. This is mandatory.
+
+For each place in the itinerary:
+1. First, call web_search with the place name and city to get real, verified information
+2. Use ONLY facts from your search results - never make up or assume facts
+
 Generate a detailed journey guide with:
 1. An exciting introduction to set the mood
-2. For each place: 2-3 fun facts and how it connects to the next destination
+2. For each place: 2-3 VERIFIED fun facts from your web search and how it connects to the next destination
 3. For walks between places: interesting things to look for (architecture styles, street art, local culture, historical buildings, etc.)
 
 Respond with this exact JSON format:
@@ -815,123 +827,153 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
         ) : (
           /* Planning Mode - Use BottomSheetView */
           <BottomSheetView style={[styles.sheetContent, { paddingBottom: insets.bottom + 16 }]}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.greeting}>
-                {itinerary.length > 0 ? 'Your trip is ready!' : 'Ready to explore?'}
-              </Text>
-              <Text style={styles.subGreeting}>
-                {itinerary.length > 0 
-                  ? `${itinerary.length} places in your itinerary` 
-                  : 'Your AI travel companions are here to help'}
-              </Text>
-            </View>
+            {/* Simplified view when itinerary has places and not showing planning UI */}
+            {!showPlanningUI && itinerary.length > 0 ? (
+              <>
+                {/* Header */}
+                <View style={styles.header}>
+                  <Text style={styles.greeting}>Your trip is ready!</Text>
+                  <Text style={styles.subGreeting}>
+                    {itinerary.length} place{itinerary.length !== 1 ? 's' : ''} in your itinerary
+                  </Text>
+                </View>
 
-            {/* Start Journey Button - Only show when itinerary has places */}
-            {itinerary.length > 0 && (
-              <TouchableOpacity
-                style={styles.startJourneyButton}
-                onPress={generateJourneyContent}
-                disabled={isGeneratingJourney}
-                activeOpacity={0.8}
-              >
-                {isGeneratingJourney ? (
-                  <>
-                    <ActivityIndicator size="small" color="#FFF" />
-                    <Text style={styles.startJourneyButtonText}>Creating your guide...</Text>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="footsteps" size={22} color="#FFF" />
-                    <Text style={styles.startJourneyButtonText}>Start Journey</Text>
-                    <Ionicons name="arrow-forward" size={18} color="#FFF" />
-                  </>
-                )}
-              </TouchableOpacity>
-            )}
-
-            {/* Prompt Input */}
-            <View style={styles.promptContainer}>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="sparkles" size={20} color="#8B5CF6" style={styles.inputIcon} />
-                <BottomSheetTextInput
-                  style={styles.promptInput}
-                  placeholder="What would you like to do today?"
-                  placeholderTextColor="#9CA3AF"
-                  value={promptText}
-                  onChangeText={setPromptText}
-                  onFocus={() => bottomSheetRef.current?.snapToIndex(1)}
-                />
-              </View>
-            </View>
-
-            {/* Guide Selection */}
-            <View style={styles.guidesSection}>
-              <Text style={styles.guidesTitle}>Choose your guide</Text>
-              <View style={styles.guidesContainer}>
-                {sortedGuides.map((guide) => (
+                {/* Two buttons side by side */}
+                <View style={styles.simplifiedButtonsContainer}>
                   <TouchableOpacity
-                    key={guide.id}
-                    style={[
-                      styles.guideCard,
-                      selectedGuide === guide.id && styles.guideCardSelected,
-                      selectedGuide === guide.id && { borderColor: guide.color },
-                    ]}
-                    onPress={() => handleGuideSelect(guide.id)}
-                    activeOpacity={0.7}
+                    style={styles.startJourneyButtonHalf}
+                    onPress={generateJourneyContent}
+                    disabled={isGeneratingJourney}
+                    activeOpacity={0.8}
                   >
-                    {/* Last used badge - only show on most recently used guide */}
-                    {lastUsedGuideId === guide.id && (
-                      <View style={styles.lastUsedBadge}>
-                        <Text style={styles.lastUsedText}>Last used!</Text>
-                      </View>
-                    )}
-                    <View style={[styles.guideIconContainer, { backgroundColor: guide.color + '20' }]}>
-                      <Ionicons name={guide.icon} size={24} color={guide.color} />
-                    </View>
-                    <Text style={styles.guideName}>{guide.name}</Text>
-                    <Text style={styles.guideDescription}>{guide.description}</Text>
-                    {selectedGuide === guide.id && (
-                      <View style={[styles.selectedIndicator, { backgroundColor: guide.color }]}>
-                        <Ionicons name="checkmark" size={12} color="#FFF" />
-                      </View>
+                    {isGeneratingJourney ? (
+                      <>
+                        <ActivityIndicator size="small" color="#FFF" />
+                        <Text style={styles.simplifiedButtonText}>Creating...</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="footsteps" size={22} color="#FFF" />
+                        <Text style={styles.simplifiedButtonText}>Start Journey</Text>
+                      </>
                     )}
                   </TouchableOpacity>
-                ))}
-              </View>
 
-              {/* Let's Go Button */}
-              <TouchableOpacity
-                style={[
-                  styles.letsGoButton,
-                  (!selectedGuide || isLoading) && styles.letsGoButtonDisabled,
-                ]}
-                onPress={handleLetsGo}
-                disabled={!selectedGuide || isLoading}
-                activeOpacity={0.8}
-              >
-                {isLoading ? (
-                  <>
-                    <ActivityIndicator size="small" color="#FFF" />
-                    <Text style={styles.letsGoButtonText}>Connecting...</Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={[
-                      styles.letsGoButtonText,
-                      !selectedGuide && styles.letsGoButtonTextDisabled,
-                    ]}>
-                      {itinerary.length > 0 ? 'Add more places' : "Let's go!"}
-                    </Text>
-                    <Ionicons 
-                      name="arrow-forward-circle" 
-                      size={22} 
-                      color={selectedGuide ? '#FFF' : '#64748B'} 
+                  <TouchableOpacity
+                    style={styles.addMoreButtonHalf}
+                    onPress={() => setShowPlanningUI(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="add-circle-outline" size={22} color="#8B5CF6" />
+                    <Text style={styles.addMoreButtonText}>Add more places</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              /* Full Planning UI */
+              <>
+                {/* Header */}
+                <View style={styles.header}>
+                  <Text style={styles.greeting}>Ready to explore?</Text>
+                  <Text style={styles.subGreeting}>Your AI travel companions are here to help</Text>
+                </View>
+
+                {/* Prompt Input */}
+                <View style={styles.promptContainer}>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="sparkles" size={20} color="#8B5CF6" style={styles.inputIcon} />
+                    <BottomSheetTextInput
+                      style={styles.promptInput}
+                      placeholder="What would you like to do today?"
+                      placeholderTextColor="#9CA3AF"
+                      value={promptText}
+                      onChangeText={setPromptText}
+                      onFocus={() => bottomSheetRef.current?.snapToIndex(1)}
                     />
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+                  </View>
+                </View>
+
+                {/* Guide Selection */}
+                <View style={styles.guidesSection}>
+                  <Text style={styles.guidesTitle}>Choose your guide</Text>
+                  <View style={styles.guidesContainer}>
+                    {sortedGuides.map((guide) => (
+                      <TouchableOpacity
+                        key={guide.id}
+                        style={[
+                          styles.guideCard,
+                          selectedGuide === guide.id && styles.guideCardSelected,
+                          selectedGuide === guide.id && { borderColor: guide.color },
+                        ]}
+                        onPress={() => handleGuideSelect(guide.id)}
+                        activeOpacity={0.7}
+                      >
+                        {/* Last used badge - only show on most recently used guide */}
+                        {lastUsedGuideId === guide.id && (
+                          <View style={styles.lastUsedBadge}>
+                            <Text style={styles.lastUsedText}>Last used!</Text>
+                          </View>
+                        )}
+                        <View style={[styles.guideIconContainer, { backgroundColor: guide.color + '20' }]}>
+                          <Ionicons name={guide.icon} size={24} color={guide.color} />
+                        </View>
+                        <Text style={styles.guideName}>{guide.name}</Text>
+                        <Text style={styles.guideDescription}>{guide.description}</Text>
+                        {selectedGuide === guide.id && (
+                          <View style={[styles.selectedIndicator, { backgroundColor: guide.color }]}>
+                            <Ionicons name="checkmark" size={12} color="#FFF" />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Let's Go Button */}
+                  <TouchableOpacity
+                    style={[
+                      styles.letsGoButton,
+                      (!selectedGuide || isLoading) && styles.letsGoButtonDisabled,
+                    ]}
+                    onPress={handleLetsGo}
+                    disabled={!selectedGuide || isLoading}
+                    activeOpacity={0.8}
+                  >
+                    {isLoading ? (
+                      <>
+                        <ActivityIndicator size="small" color="#FFF" />
+                        <Text style={styles.letsGoButtonText}>Connecting...</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={[
+                          styles.letsGoButtonText,
+                          !selectedGuide && styles.letsGoButtonTextDisabled,
+                        ]}>
+                          Let's go!
+                        </Text>
+                        <Ionicons 
+                          name="arrow-forward-circle" 
+                          size={22} 
+                          color={selectedGuide ? '#FFF' : '#64748B'} 
+                        />
+                      </>
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Back to simplified view button - only show if itinerary has places */}
+                  {itinerary.length > 0 && (
+                    <TouchableOpacity
+                      style={styles.backToSimplifiedButton}
+                      onPress={() => setShowPlanningUI(false)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="arrow-back" size={18} color="#94A3B8" />
+                      <Text style={styles.backToSimplifiedText}>Back to itinerary</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
           </BottomSheetView>
         )}
       </BottomSheet>
@@ -1594,6 +1636,56 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#FFF',
+  },
+  // Simplified view styles (2 buttons side by side)
+  simplifiedButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  startJourneyButtonHalf: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    borderRadius: 16,
+    paddingVertical: 18,
+    gap: 8,
+  },
+  addMoreButtonHalf: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    paddingVertical: 18,
+    gap: 8,
+    borderWidth: 2,
+    borderColor: '#8B5CF6',
+  },
+  simplifiedButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  addMoreButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#8B5CF6',
+  },
+  backToSimplifiedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 12,
+    gap: 6,
+  },
+  backToSimplifiedText: {
+    fontSize: 14,
+    color: '#94A3B8',
   },
   // Journey Mode Styles
   journeyHeader: {
