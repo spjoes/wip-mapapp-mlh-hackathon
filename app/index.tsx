@@ -186,7 +186,11 @@ export default function HomeScreen() {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   // Snap points for the bottom sheet
-  const snapPoints = useMemo(() => ['38%', '65%', '90%'], []);
+  // Planning mode: max 65% (half screen), Journey mode: can go to 90%
+  const snapPoints = useMemo(() => 
+    isJourneyMode ? ['38%', '65%', '90%'] : ['38%', '65%'], 
+    [isJourneyMode]
+  );
 
   // Sort guides by usage order (most recently used first)
   const sortedGuides = useMemo(() => {
