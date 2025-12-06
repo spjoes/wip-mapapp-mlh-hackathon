@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import BottomSheet, { BottomSheetScrollView, BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView, BottomSheetTextInput, BottomSheetView } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -12,10 +12,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   UIManager,
-  View,
+  View
 } from 'react-native';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -710,6 +709,9 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
         handleIndicatorStyle={styles.handleIndicator}
         enablePanDownToClose={false}
         enableOverDrag={true}
+        keyboardBehavior="extend"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
         {isJourneyMode && journeyContent ? (
           /* Journey Mode - Use BottomSheetScrollView directly */
@@ -848,13 +850,13 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
             <View style={styles.promptContainer}>
               <View style={styles.inputWrapper}>
                 <Ionicons name="sparkles" size={20} color="#8B5CF6" style={styles.inputIcon} />
-                <TextInput
+                <BottomSheetTextInput
                   style={styles.promptInput}
                   placeholder="What would you like to do today?"
                   placeholderTextColor="#9CA3AF"
                   value={promptText}
                   onChangeText={setPromptText}
-                  multiline={false}
+                  onFocus={() => bottomSheetRef.current?.snapToIndex(1)}
                 />
               </View>
             </View>
