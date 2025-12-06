@@ -28,6 +28,9 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+import { AccentPickerModal } from '@/components/accent-picker-modal';
+import { PlaceSpeakerButton } from '@/components/place-speaker-button';
+import { JourneyStep as JourneyStepType, useAudioNarration } from '@/hooks/use-audio-narration';
 import { hasApiKey, sendAgentMessage } from '@/services/agent';
 import { formatPlacesForAI, hasFoursquareApiKey, searchNearbyPlaces } from '@/services/places';
 import { formatDistance, formatDuration, getOptimizedRoute } from '@/services/routing';
@@ -298,6 +301,9 @@ export default function HomeScreen() {
   
   // Prompt input visibility - collapsed by default to reduce clutter
   const [showPromptInput, setShowPromptInput] = useState(false);
+
+  // Audio narration hook
+  const audioNarration = useAudioNarration();
 
   // Snap points for the bottom sheet
   // Simplified view: fixed 25%, Journey mode: can expand, Planning mode: medium height
@@ -659,7 +665,9 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
     }
   };
 
-  const exitJourneyMode = () => {
+  const exitJourneyMode = async () => {
+    // Stop audio playback when exiting journey mode
+    await audioNarration.stopPlayback();
     setIsJourneyMode(false);
     setJourneyContent(null);
     setCurrentStepIndex(0);
@@ -925,6 +933,14 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
                           <Text style={styles.journeyPlaceMetaText}>{step.place.price}</Text>
                         </View>
                       </View>
+                      <PlaceSpeakerButton
+                        isPlaying={audioNarration.isPlaying && audioNarration.currentPlayingId === `place-${index}`}
+                        isLoading={audioNarration.isLoading && audioNarration.currentPlayingId === `place-${index}`}
+                        onPress={() => {
+                          const placeNumber = journeyContent.steps.filter((s, i) => s.type === 'place' && i <= index).length;
+                          audioNarration.togglePlacePlayback(step as JourneyStepType, placeNumber, `place-${index}`);
+                        }}
+                      />
                     </View>
                     
                     {step.funFacts && step.funFacts.length > 0 && (
@@ -1285,6 +1301,14 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
           </View>
         </View>
       </Modal>
+
+      {/* Accent Picker Modal */}
+      <AccentPickerModal
+        visible={audioNarration.isAccentPickerVisible}
+        selectedAccent={audioNarration.selectedAccent}
+        onSelect={audioNarration.setAccent}
+        onClose={audioNarration.hideAccentPicker}
+      />
     </GestureHandlerRootView>
   );
 }
