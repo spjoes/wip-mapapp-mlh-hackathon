@@ -36,11 +36,29 @@ export const sendAgentMessage = async (
     let contextualMessage = '';
     
     if (locationContext) {
-      contextualMessage += `[User's current location: ${locationContext.latitude.toFixed(6)}, ${locationContext.longitude.toFixed(6)}]\n\n`;
+      contextualMessage += `[USER LOCATION: ${locationContext.latitude.toFixed(6)}, ${locationContext.longitude.toFixed(6)}]\n\n`;
     }
     
-    if (nearbyPlacesContext) {
-      contextualMessage += `[NEARBY PLACES - You MUST only recommend places from this list and use their exact coordinates:]\n${nearbyPlacesContext}\n\n`;
+    if (nearbyPlacesContext && nearbyPlacesContext !== 'No nearby places found.') {
+      contextualMessage += `[NEARBY PLACES FROM DATABASE - STRONGLY PREFER these places and use their EXACT coordinates:]
+${nearbyPlacesContext}
+
+IMPORTANT INSTRUCTIONS:
+1. FIRST, look through the places above and pick ones that match your guide expertise
+2. Use the EXACT coordinates provided - do NOT make up coordinates
+3. If the list above doesn't have good matches for your guide type(s), you MUST use your web_search tool to find appropriate real venues near the user's location
+4. NEVER recommend generic/famous landmarks unless they truly fit the guide personalities selected
+5. Each recommended place MUST align with at least one of the selected guide types
+
+`;
+    } else {
+      // No places found from Foursquare - instruct AI to use web search
+      contextualMessage += `[NO PLACES FOUND IN DATABASE]
+You MUST use your web_search tool to find real venues near the user's location that match your guide expertise.
+Search for specific venue types that fit your guide personality. Get real names, addresses, and coordinates.
+Do NOT make up places or use generic famous landmarks.
+
+`;
     }
     
     contextualMessage += userMessage;

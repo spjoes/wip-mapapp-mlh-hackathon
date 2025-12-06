@@ -448,13 +448,13 @@ export default function HomeScreen() {
       ? { latitude: location.coords.latitude, longitude: location.coords.longitude }
       : undefined;
 
-    // Fetch nearby places from Foursquare (use first guide type for categories)
+    // Fetch nearby places from Foursquare using ALL selected guide types
     let nearbyPlacesContext: string | undefined;
     if (locationContext && hasFoursquareApiKey()) {
       const placesResult = await searchNearbyPlaces({
         latitude: locationContext.latitude,
         longitude: locationContext.longitude,
-        guideType: guides[0].id,
+        guideTypes: guides.map(g => g.id), // Pass all selected guide types
         query: promptText.trim() || undefined,
         radius: 10000, // 10km radius
         limit: 25,
