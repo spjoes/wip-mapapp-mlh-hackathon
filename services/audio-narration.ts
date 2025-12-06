@@ -1,5 +1,3 @@
-import { Audio } from 'expo-av';
-import { sendAgentMessage } from './agent';
 
 // Accent types and configuration
 export type AccentType = 'american' | 'australian' | 'british' | 'scottish' | 'other';
@@ -260,6 +258,7 @@ export const generateEnhancedFallbackNarration = (step: JourneyStep, placeNumber
   return parts.join(' ');
 };
 
+
 /**
  * Uses AI to generate a rich, detailed overview narration for the entire journey
  */
@@ -487,4 +486,3 @@ export const isAudioPlaying = async (): Promise<boolean> => {
     return false;
   }
 };
-

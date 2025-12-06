@@ -32,7 +32,6 @@ import { AccentPickerModal } from '@/components/accent-picker-modal';
 import { PlaceSpeakerButton } from '@/components/place-speaker-button';
 import { JourneyStep as JourneyStepType, useAudioNarration } from '@/hooks/use-audio-narration';
 import { hasApiKey, sendAgentMessage } from '@/services/agent';
-import { formatPlacesForAI, hasFoursquareApiKey, searchNearbyPlaces } from '@/services/places';
 import { formatDistance, formatDuration, getOptimizedRoute } from '@/services/routing';
 
 interface Guide {
@@ -105,7 +104,7 @@ Include 3-5 places in your response. The coordinates should be real, accurate GP
 const GUIDES: Guide[] = [
   {
     id: 'historian',
-    name: 'The Historian',
+    name: 'Historian',
     description: 'Uncover hidden stories & landmarks',
     icon: 'library-outline',
     color: '#8B5CF6',
@@ -122,11 +121,11 @@ Always provide specific, actionable recommendations based on the user's location
   },
   {
     id: 'foodie',
-    name: 'Local Foodie',
+    name: 'Foodie',
     description: 'Discover authentic flavors nearby',
     icon: 'restaurant-outline',
     color: '#F59E0B',
-    personality: `You are "Local Foodie," an enthusiastic culinary guide who lives and breathes food culture. You have an intimate knowledge of local cuisines, hidden gem restaurants, street food, and authentic dining experiences.
+    personality: `You are "The Foodie," an enthusiastic culinary guide who lives and breathes food culture. You have an intimate knowledge of local cuisines, hidden gem restaurants, street food, and authentic dining experiences.
 
 Your style:
 - Recommend restaurants, cafes, food markets, and street food vendors
@@ -139,12 +138,12 @@ Your style:
 Always provide specific restaurant names, dishes to try, and practical tips like price ranges and reservation needs. Be passionate about food and make the user hungry to explore!${RESPONSE_FORMAT_INSTRUCTIONS}`,
   },
   {
-    id: 'adventurer',
-    name: 'Adventure Scout',
-    description: 'Find thrilling experiences',
+    id: 'adventure',
+    name: 'Adventurer',
+    description: 'Seek thrills, nature pockets & bold experiences',
     icon: 'compass-outline',
     color: '#10B981',
-    personality: `You are "Adventure Scout," an energetic and daring travel guide who specializes in outdoor activities, unique experiences, and off-the-beaten-path adventures. You thrive on excitement and helping travelers step outside their comfort zone.
+    personality: `You are "The Adventurer," an energetic and daring travel guide who specializes in outdoor activities, unique experiences, and off-the-beaten-path adventures. You thrive on excitement and helping travelers step outside their comfort zone.
 
 Your style:
 - Recommend hiking trails, water sports, climbing spots, and outdoor activities
@@ -156,6 +155,114 @@ Your style:
 
 Always consider the user's fitness level and preferences. Be enthusiastic, encouraging, and help users create unforgettable adventure memories!${RESPONSE_FORMAT_INSTRUCTIONS}`,
   },
+  {
+    id: 'tech_guru',
+    name: 'Tech Guru',
+    description: 'Explore innovation hubs, startups & digital culture',
+    icon: 'trending-up-outline',
+    color: '#3B82F6',
+    personality: `You are "Tech Guru," a forward-thinking guide who knows the pulse of innovation and technology scenes. You're plugged into startup ecosystems, tech campuses, maker spaces, and the digital culture that shapes modern cities.
+
+Your style:
+- Recommend tech company headquarters, innovation districts, and startup hubs worth visiting
+- Point out coworking spaces, hackerspaces, and maker labs open to visitors
+- Share stories about tech history and breakthroughs that happened in specific locations
+- Suggest tech-themed museums, interactive exhibits, and science centers
+- Know about tech meetups, conferences, and community events
+- Highlight how technology has transformed different neighborhoods
+
+Always be curious and enthusiastic about innovation. Help users discover where the future is being built!${RESPONSE_FORMAT_INSTRUCTIONS}`,
+  },
+  {
+    id: 'architect',
+    name: 'Architect',
+    description: 'Decode buildings, skylines & urban design',
+    icon: 'business-outline',
+    color: '#6366F1',
+    personality: `You are "The Architect," a design-obsessed guide who sees cities as living textbooks of architectural history and urban planning. You appreciate everything from ancient structures to cutting-edge contemporary design.
+
+Your style:
+- Point out architectural styles, movements, and their historical context
+- Recommend iconic buildings, bridges, and structures worth visiting
+- Explain urban design choices and how neighborhoods were planned
+- Share stories about famous architects and their signature works
+- Notice details others miss: facades, materials, structural innovations
+- Suggest the best vantage points for skyline views and building appreciation
+
+Always help users see the built environment with new eyes. Make them appreciate the intention and artistry behind every structure!${RESPONSE_FORMAT_INSTRUCTIONS}`,
+  },
+  {
+    id: 'night_owl',
+    name: 'Night Owl',
+    description: 'Navigate nightlife, late eats & neon-lit corners',
+    icon: 'moon-outline',
+    color: '#A855F7',
+    personality: `You are "The Night Owl," a nocturnal guide who knows cities come alive after dark. You're an expert on nightlife scenes, late-night dining, entertainment venues, and the magic that happens when the sun goes down.
+
+Your style:
+- Recommend the best bars, clubs, live music venues, and entertainment spots
+- Know which restaurants serve late and where to find the best after-hours eats
+- Share tips on neighborhood vibes at night and where different crowds gather
+- Suggest evening experiences: night markets, rooftop bars, jazz clubs, comedy shows
+- Provide practical advice on safety, transportation, and timing
+- Know about special night events, DJ residencies, and seasonal happenings
+
+Always be fun and energetic. Help users experience the electric energy of the city after dark!${RESPONSE_FORMAT_INSTRUCTIONS}`,
+  },
+  {
+    id: 'artist',
+    name: 'Artist',
+    description: 'Find murals, creative spaces & cultural gems',
+    icon: 'color-palette-outline',
+    color: '#EC4899',
+    personality: `You are "Artist," a creative soul who sees the city as a canvas. You know where to find street art, galleries, artist studios, and the creative communities that give neighborhoods their character.
+
+Your style:
+- Point out street art, murals, and public art installations worth seeing
+- Recommend galleries, art museums, and artist-run spaces
+- Share stories about local artists and creative movements
+- Suggest art walks, open studio events, and creative workshops
+- Know about art supply shops, creative cafes, and spaces where artists gather
+- Highlight how art and creativity shape different neighborhoods
+
+Always be passionate and observant. Help users discover the artistic soul of every place they visit!${RESPONSE_FORMAT_INSTRUCTIONS}`,
+  },
+  {
+    id: 'local_oddball',
+    name: 'Local Oddball',
+    description: 'Uncover quirks, curiosities & offbeat local secrets',
+    icon: 'sparkles-outline',
+    color: '#0EA5E9',
+    personality: `You are "Local Oddball," a delightfully eccentric guide who collects weird facts, bizarre attractions, and the strange stories that don't make it into guidebooks. You celebrate the wonderfully weird.
+
+Your style:
+- Recommend unusual museums, quirky attractions, and bizarre landmarks
+- Share strange local legends, urban myths, and unexplained phenomena
+- Point out oddities hiding in plain sight that most people walk past
+- Suggest experiences that are memorably weird: unusual restaurants, themed bars, strange shops
+- Know about eccentric local characters and their stories
+- Celebrate what makes each place uniquely strange
+
+Always be curious and delighted by oddities. Help users discover that every place has its wonderful weirdness!${RESPONSE_FORMAT_INSTRUCTIONS}`,
+  },
+  {
+    id: 'sports_buff',
+    name: 'Sports Buff',
+    description: 'Visit stadiums, courts & iconic athletic spots',
+    icon: 'tennisball-outline',
+    color: '#FACC15',
+    personality: `You are "Sports Buff," an enthusiastic guide who knows the athletic heart of every city. From legendary stadiums to local pickup games, you know where sports history was made and where the action happens today.
+
+Your style:
+- Recommend stadiums, arenas, and sports venues worth visiting
+- Share stories about legendary games, athletes, and sports moments tied to locations
+- Suggest sports bars and places where fans gather to watch games
+- Know about pickup games, public courts, and places to play
+- Point out statues, memorials, and tributes to sports legends
+- Recommend sports museums and halls of fame
+
+Always be passionate and knowledgeable. Help users connect with the sports culture and history of every destination!${RESPONSE_FORMAT_INSTRUCTIONS}`,
+  },
 ];
 
 export default function HomeScreen() {
@@ -163,7 +270,7 @@ export default function HomeScreen() {
   const bottomSheetRef = useRef<BottomSheet>(null);
   const mapRef = useRef<MapView>(null);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
-  const [selectedGuide, setSelectedGuide] = useState<string | null>(null);
+  const [selectedGuides, setSelectedGuides] = useState<Set<string>>(new Set());
   const [promptText, setPromptText] = useState('');
   const [permissionStatus, setPermissionStatus] = useState<'pending' | 'granted' | 'denied'>('pending');
   
@@ -190,16 +297,29 @@ export default function HomeScreen() {
   
   // Planning UI state - when false and itinerary has items, show simplified 2-button view
   const [showPlanningUI, setShowPlanningUI] = useState(true);
+  
+  // Prompt input visibility - collapsed by default to reduce clutter
+  const [showPromptInput, setShowPromptInput] = useState(false);
+
+  // Audio narration hook
+  const audioNarration = useAudioNarration();
 
   // Audio narration hook
   const audioNarration = useAudioNarration();
 
   // Snap points for the bottom sheet
-  // Planning mode: max 65% (half screen), Journey mode: can go to 90%
-  const snapPoints = useMemo(() => 
-    isJourneyMode ? ['38%', '65%', '90%'] : ['50%', '65%'], 
-    [isJourneyMode]
-  );
+  // Simplified view: fixed 25%, Journey mode: can expand, Planning mode: medium height
+  const snapPoints = useMemo(() => {
+    if (!showPlanningUI && itinerary.length > 0 && !isJourneyMode) {
+      // "Your trip is ready" simplified view - fixed small height
+      return ['25%'];
+    }
+    if (isJourneyMode) {
+      return ['38%', '65%', '90%'];
+    }
+    // Full planning UI
+    return ['65%', '90%'];
+  }, [isJourneyMode, showPlanningUI, itinerary.length]);
 
   // Sort guides by usage order (most recently used first)
   const sortedGuides = useMemo(() => {
@@ -280,17 +400,25 @@ export default function HomeScreen() {
   };
 
   const handleGuideSelect = (guideId: string) => {
-    setSelectedGuide(guideId === selectedGuide ? null : guideId);
+    setSelectedGuides(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(guideId)) {
+        newSet.delete(guideId);
+      } else {
+        newSet.add(guideId);
+      }
+      return newSet;
+    });
   };
 
   const handleLetsGo = async () => {
-    if (!selectedGuide || isLoading) return;
+    if (selectedGuides.size === 0 || isLoading) return;
 
-    // Check if API keys are configured in .env
-    if (!hasApiKey() || !hasFoursquareApiKey()) {
+    // Check if API key is configured in .env (Foursquare no longer needed - using web_search)
+    if (!hasApiKey()) {
       Alert.alert(
-        'API Keys Missing',
-        'Please add your API keys to the .env file:\n\n• EXPO_PUBLIC_DO_AGENT_API_KEY\n• EXPO_PUBLIC_FOURSQUARE_API_KEY\n\nThen restart the app.',
+        'API Key Missing',
+        'Please add your DigitalOcean Agent API key to the .env file:\n\n• EXPO_PUBLIC_DO_AGENT_API_KEY\n\nThen restart the app.',
         [{ text: 'OK' }]
       );
       return;
@@ -300,13 +428,14 @@ export default function HomeScreen() {
   };
 
   const startAgentConversation = async () => {
-    const guide = GUIDES.find(g => g.id === selectedGuide);
-    if (!guide) return;
+    const guides = GUIDES.filter(g => selectedGuides.has(g.id));
+    if (guides.length === 0) return;
 
-    // Track this guide as most recently used
+    // Track these guides as most recently used
     setGuideUsageOrder(prev => {
-      const filtered = prev.filter(id => id !== guide.id);
-      return [guide.id, ...filtered];
+      const guideIds = guides.map(g => g.id);
+      const filtered = prev.filter(id => !guideIds.includes(id));
+      return [...guideIds, ...filtered];
     });
 
     setIsLoading(true);
@@ -321,26 +450,29 @@ export default function HomeScreen() {
       ? { latitude: location.coords.latitude, longitude: location.coords.longitude }
       : undefined;
 
-    // Fetch nearby places from Foursquare
-    let nearbyPlacesContext: string | undefined;
-    if (locationContext && hasFoursquareApiKey()) {
-      const placesResult = await searchNearbyPlaces({
-        latitude: locationContext.latitude,
-        longitude: locationContext.longitude,
-        guideType: guide.id,
-        query: promptText.trim() || undefined,
-        radius: 10000, // 10km radius
-        limit: 25,
-      });
+    // Skip Foursquare - let AI use web_search to find real venues
+    // This produces better results since AI can search for specific venue types
+    const nearbyPlacesContext = undefined;
+    console.log('Skipping Foursquare - AI will use web_search to find venues');
 
-      if (placesResult.success && placesResult.places) {
-        nearbyPlacesContext = formatPlacesForAI(placesResult.places);
-        console.log('Found nearby places for AI context');
-      }
+    // Combine personalities if multiple guides selected
+    let combinedPersonality: string;
+    if (guides.length === 1) {
+      combinedPersonality = guides[0].personality;
+    } else {
+      const guideNames = guides.map(g => g.name).join(' and ');
+      const personalityParts = guides.map(g => 
+        `As ${g.name}:\n${g.personality.split(RESPONSE_FORMAT_INSTRUCTIONS)[0]}`
+      ).join('\n\n');
+      combinedPersonality = `You are a unique hybrid guide combining the perspectives of ${guideNames}. Blend their expertise and personalities seamlessly in your recommendations.
+
+${personalityParts}
+
+When making recommendations, consider all your combined perspectives and offer places that would satisfy multiple interests when possible.${RESPONSE_FORMAT_INSTRUCTIONS}`;
     }
 
     const response = await sendAgentMessage(
-      guide.personality,
+      combinedPersonality,
       userMessage,
       locationContext,
       nearbyPlacesContext
@@ -384,21 +516,72 @@ export default function HomeScreen() {
     });
   };
 
-  const handleAddToItinerary = () => {
+  const handleAddToItinerary = async () => {
     if (!agentResponse || selectedPlaces.size === 0) return;
     
-    // Add unique IDs to each place
-    const placesToAdd = agentResponse.places
-      .filter((_, index) => selectedPlaces.has(index))
-      .map((place, idx) => ({
-        ...place,
-        id: `place-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`,
-      }));
+    // Get the selected places
+    const selectedPlacesData = agentResponse.places
+      .filter((_, index) => selectedPlaces.has(index));
     
-    setItinerary(prev => [...prev, ...placesToAdd]);
-    
-    // Close modal and reset selection
+    // Close modal immediately for better UX, show loading indicator
     setShowResponseModal(false);
+    setIsLoading(true);
+    
+    // Geocode each place to get accurate coordinates using Nominatim (OpenStreetMap)
+    // This fixes the issue of AI generating inaccurate coordinates
+    const geocodedPlaces: Place[] = [];
+    
+    for (let i = 0; i < selectedPlacesData.length; i++) {
+      const place = selectedPlacesData[i];
+      
+      // Rate limit: Nominatim requires 1 second between requests
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1100));
+      }
+      
+      try {
+        // Try to geocode using Nominatim (free, no API key needed)
+        const query = encodeURIComponent(`${place.name}, San Francisco`);
+        const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`;
+        
+        console.log(`Geocoding: "${place.name}"...`);
+        
+        const response = await fetch(url, {
+          headers: { 'User-Agent': 'DetourApp/1.0' },
+        });
+        
+        if (response.ok) {
+          const results = await response.json();
+          
+          if (results.length > 0) {
+            const geocoded = results[0];
+            console.log(`  Found: ${geocoded.display_name} at ${geocoded.lat}, ${geocoded.lon}`);
+            
+            geocodedPlaces.push({
+              ...place,
+              id: `place-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+              lat: parseFloat(geocoded.lat),
+              lng: parseFloat(geocoded.lon),
+            });
+            continue;
+          }
+        }
+      } catch (error) {
+        console.error(`Geocoding failed for "${place.name}":`, error);
+      }
+      
+      // Fallback: use AI's coordinates if geocoding fails
+      console.log(`  Using AI coordinates for "${place.name}"`);
+      geocodedPlaces.push({
+        ...place,
+        id: `place-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+      });
+    }
+    
+    setIsLoading(false);
+    setItinerary(prev => [...prev, ...geocodedPlaces]);
+    
+    // Reset selection
     setSelectedPlaces(new Set());
     setAgentResponse(null);
     
@@ -848,7 +1031,7 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
               <>
                 {/* Header */}
                 <View style={styles.header}>
-                  <Text style={styles.greeting}>Your trip is ready!</Text>
+                  <Text style={styles.greeting}>Your route is ready! Any changes?</Text>
                   <Text style={styles.subGreeting}>
                     {itinerary.length} place{itinerary.length !== 1 ? 's' : ''} in your itinerary
                   </Text>
@@ -894,64 +1077,92 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
                   <Text style={styles.subGreeting}>Your AI travel companions are here to help</Text>
                 </View>
 
-                {/* Prompt Input */}
-                <View style={styles.promptContainer}>
-                  <View style={styles.inputWrapper}>
-                    <Ionicons name="sparkles" size={20} color="#8B5CF6" style={styles.inputIcon} />
-                    <BottomSheetTextInput
-                      style={styles.promptInput}
-                      placeholder="What would you like to do today?"
-                      placeholderTextColor="#9CA3AF"
-                      value={promptText}
-                      onChangeText={setPromptText}
-                      onFocus={() => bottomSheetRef.current?.snapToIndex(1)}
-                    />
-                  </View>
-                </View>
-
                 {/* Guide Selection */}
                 <View style={styles.guidesSection}>
-                  <Text style={styles.guidesTitle}>Choose your guide</Text>
-                  <View style={styles.guidesContainer}>
-                    {sortedGuides.map((guide) => (
-                      <TouchableOpacity
-                        key={guide.id}
-                        style={[
-                          styles.guideCard,
-                          selectedGuide === guide.id && styles.guideCardSelected,
-                          selectedGuide === guide.id && { borderColor: guide.color },
-                        ]}
-                        onPress={() => handleGuideSelect(guide.id)}
-                        activeOpacity={0.7}
-                      >
-                        {/* Last used badge - only show on most recently used guide */}
-                        {lastUsedGuideId === guide.id && (
-                          <View style={styles.lastUsedBadge}>
-                            <Text style={styles.lastUsedText}>Last used!</Text>
+                  <Text style={styles.guidesTitle}>Choose your guide(s)</Text>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.guidesScrollContent}
+                    style={styles.guidesScrollView}
+                  >
+                    {sortedGuides.map((guide) => {
+                      const isSelected = selectedGuides.has(guide.id);
+                      return (
+                        <TouchableOpacity
+                          key={guide.id}
+                          style={[
+                            styles.guideCard,
+                            isSelected && styles.guideCardSelected,
+                            isSelected && { borderColor: guide.color },
+                          ]}
+                          onPress={() => handleGuideSelect(guide.id)}
+                          activeOpacity={0.7}
+                        >
+                          {/* Last used badge - only show on most recently used guide */}
+                          {lastUsedGuideId === guide.id && !isSelected && (
+                            <View style={styles.lastUsedBadge}>
+                              <Text style={styles.lastUsedText}>Last used!</Text>
+                            </View>
+                          )}
+                          <View style={[styles.guideIconContainer, { backgroundColor: guide.color + '20' }]}>
+                            <Ionicons name={guide.icon} size={28} color={guide.color} />
                           </View>
-                        )}
-                        <View style={[styles.guideIconContainer, { backgroundColor: guide.color + '20' }]}>
-                          <Ionicons name={guide.icon} size={24} color={guide.color} />
-                        </View>
-                        <Text style={styles.guideName}>{guide.name}</Text>
-                        <Text style={styles.guideDescription}>{guide.description}</Text>
-                        {selectedGuide === guide.id && (
-                          <View style={[styles.selectedIndicator, { backgroundColor: guide.color }]}>
-                            <Ionicons name="checkmark" size={12} color="#FFF" />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                          <Text style={styles.guideName} numberOfLines={1}>{guide.name}</Text>
+                          <Text style={styles.guideDescription}>{guide.description}</Text>
+                          {isSelected && (
+                            <View style={[styles.selectedIndicator, { backgroundColor: guide.color }]}>
+                              <Ionicons name="checkmark" size={14} color="#FFF" />
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {/* Collapsible Prompt Input */}
+                  {showPromptInput ? (
+                    <View style={styles.promptContainer}>
+                      <View style={styles.inputWrapper}>
+                        <Ionicons name="sparkles" size={20} color="#8B5CF6" style={styles.inputIcon} />
+                        <BottomSheetTextInput
+                          style={styles.promptInput}
+                          placeholder="e.g., kid-friendly spots, wheelchair accessible..."
+                          placeholderTextColor="#9CA3AF"
+                          value={promptText}
+                          onChangeText={setPromptText}
+                          onFocus={() => bottomSheetRef.current?.snapToIndex(1)}
+                        />
+                        <TouchableOpacity 
+                          onPress={() => {
+                            setShowPromptInput(false);
+                            setPromptText('');
+                          }}
+                          style={styles.clearPromptButton}
+                        >
+                          <Ionicons name="close-circle" size={20} color="#64748B" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity 
+                      style={styles.addRequestToggle}
+                      onPress={() => setShowPromptInput(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="add-circle-outline" size={18} color="#8B5CF6" />
+                      <Text style={styles.addRequestText}>Add specific request</Text>
+                    </TouchableOpacity>
+                  )}
 
                   {/* Let's Go Button */}
                   <TouchableOpacity
                     style={[
                       styles.letsGoButton,
-                      (!selectedGuide || isLoading) && styles.letsGoButtonDisabled,
+                      (selectedGuides.size === 0 || isLoading) && styles.letsGoButtonDisabled,
                     ]}
                     onPress={handleLetsGo}
-                    disabled={!selectedGuide || isLoading}
+                    disabled={selectedGuides.size === 0 || isLoading}
                     activeOpacity={0.8}
                   >
                     {isLoading ? (
@@ -963,14 +1174,14 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
                       <>
                         <Text style={[
                           styles.letsGoButtonText,
-                          !selectedGuide && styles.letsGoButtonTextDisabled,
+                          selectedGuides.size === 0 && styles.letsGoButtonTextDisabled,
                         ]}>
-                          Let's go!
+                          {selectedGuides.size > 1 ? `Let's go with ${selectedGuides.size} guides!` : "Let's go!"}
                         </Text>
                         <Ionicons 
                           name="arrow-forward-circle" 
                           size={22} 
-                          color={selectedGuide ? '#FFF' : '#64748B'} 
+                          color={selectedGuides.size > 0 ? '#FFF' : '#64748B'} 
                         />
                       </>
                     )}
@@ -1005,20 +1216,25 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
           <View style={[styles.responseModalContent, { paddingBottom: insets.bottom + 20 }]}>
             <View style={styles.responseModalHeader}>
               <View style={styles.responseModalTitleRow}>
-                {selectedGuide && (
-                  <View style={[
-                    styles.responseGuideIcon, 
-                    { backgroundColor: GUIDES.find(g => g.id === selectedGuide)?.color + '20' }
-                  ]}>
-                    <Ionicons 
-                      name={GUIDES.find(g => g.id === selectedGuide)?.icon || 'chatbubble'} 
-                      size={20} 
-                      color={GUIDES.find(g => g.id === selectedGuide)?.color} 
-                    />
+                {selectedGuides.size > 0 && (
+                  <View style={styles.responseGuideIcons}>
+                    {GUIDES.filter(g => selectedGuides.has(g.id)).slice(0, 3).map((guide, idx) => (
+                      <View 
+                        key={guide.id}
+                        style={[
+                          styles.responseGuideIcon, 
+                          { backgroundColor: guide.color + '20', marginLeft: idx > 0 ? -8 : 0, zIndex: 3 - idx }
+                        ]}
+                      >
+                        <Ionicons name={guide.icon} size={18} color={guide.color} />
+                      </View>
+                    ))}
                   </View>
                 )}
                 <Text style={styles.responseModalTitle}>
-                  {GUIDES.find(g => g.id === selectedGuide)?.name || 'Your Guide'}
+                  {selectedGuides.size > 1 
+                    ? `${selectedGuides.size} Guides` 
+                    : GUIDES.find(g => selectedGuides.has(g.id))?.name || 'Your Guide'}
                 </Text>
               </View>
               <TouchableOpacity
@@ -1354,21 +1570,38 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   header: {
-    marginBottom: 20,
+    marginBottom: 14,
   },
   greeting: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '700',
     color: '#F8FAFC',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   subGreeting: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#94A3B8',
-    marginTop: 4,
+    marginTop: 2,
   },
   promptContainer: {
-    marginBottom: 24,
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  addRequestToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+    gap: 6,
+  },
+  addRequestText: {
+    fontSize: 14,
+    color: '#8B5CF6',
+    fontWeight: '500',
+  },
+  clearPromptButton: {
+    padding: 4,
   },
   inputWrapper: {
     flexDirection: 'row',
@@ -1398,12 +1631,18 @@ const styles = StyleSheet.create({
     color: '#CBD5E1',
     marginBottom: 14,
   },
-  guidesContainer: {
-    flexDirection: 'row',
+  guidesScrollView: {
+    marginHorizontal: -20, // Extend to edges
+    marginTop: 4, // Space for "Last used" badge
+  },
+  guidesScrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: 12, // Space for "Last used" badge overflow
+    paddingBottom: 4,
     gap: 12,
   },
   guideCard: {
-    flex: 1,
+    width: 180,
     backgroundColor: '#1E293B',
     borderRadius: 16,
     padding: 14,
@@ -1412,7 +1651,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   guideCardSelected: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#252f3f',
+    borderColor: '#8B5CF6',
   },
   lastUsedBadge: {
     position: 'absolute',
@@ -1432,31 +1672,32 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   guideIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   guideName: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#F8FAFC',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   guideDescription: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#94A3B8',
-    lineHeight: 15,
+    lineHeight: 16,
+    flex: 1,
   },
   selectedIndicator: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    top: 10,
+    right: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1507,12 +1748,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  responseGuideIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   responseGuideIcon: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#1E293B',
   },
   responseModalTitle: {
     fontSize: 18,

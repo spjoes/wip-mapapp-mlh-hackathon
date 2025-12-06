@@ -36,12 +36,33 @@ export const sendAgentMessage = async (
     let contextualMessage = '';
     
     if (locationContext) {
-      contextualMessage += `[User's current location: ${locationContext.latitude.toFixed(6)}, ${locationContext.longitude.toFixed(6)}]\n\n`;
+      contextualMessage += `[USER LOCATION: ${locationContext.latitude.toFixed(6)}, ${locationContext.longitude.toFixed(6)}]\n\n`;
     }
     
-    if (nearbyPlacesContext) {
-      contextualMessage += `[NEARBY PLACES - You MUST only recommend places from this list and use their exact coordinates:]\n${nearbyPlacesContext}\n\n`;
-    }
+    // Streamlined instructions - find venues quickly, coordinates will be geocoded after
+    contextualMessage += `INSTRUCTIONS FOR FINDING PLACES:
+
+Use ONE web_search to find real venues near the user that match your guide expertise.
+Example search: "best speakeasies arcade bars quirky museums San Francisco"
+
+GUIDE TYPES TO MATCH:
+- Tech Guru: gaming cafes, VR arcades, hackerspaces, tech museums
+- Night Owl: speakeasies, rooftop bars, jazz clubs, comedy clubs
+- Local Oddball: weird museums, themed bars, escape rooms, oddity shops
+- Historian: historical landmarks, heritage sites, museums
+- Foodie: restaurants, food markets, local eateries
+- Adventurer: outdoor activities, hiking spots, nature areas
+- Architect: notable buildings, architectural landmarks
+- Artist: galleries, murals, creative spaces
+- Sports Buff: stadiums, sports bars, athletic venues
+
+IMPORTANT:
+- DO NOT search for coordinates - just provide approximate ones, we will verify them
+- Focus on finding REAL venue names that match the guide types
+- Do ONE comprehensive search, not multiple searches
+- Respond quickly with 3-5 great recommendations
+
+`;
     
     contextualMessage += userMessage;
 
