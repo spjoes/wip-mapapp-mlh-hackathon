@@ -12,7 +12,8 @@ interface RouteResult {
 }
 
 /**
- * Get optimized route using OSRM (Open Source Routing Machine)
+ * Get route using OSRM (Open Source Routing Machine)
+ * This respects the exact order of places in the itinerary
  * This is a free service that doesn't require an API key
  */
 export const getOptimizedRoute = async (
@@ -33,7 +34,7 @@ export const getOptimizedRoute = async (
       coords.push(`${userLocation.longitude},${userLocation.latitude}`);
     }
     
-    // Add all places
+    // Add all places in the exact order they appear in the itinerary
     places.forEach(place => {
       coords.push(`${place.lng},${place.lat}`);
     });
@@ -49,10 +50,9 @@ export const getOptimizedRoute = async (
       };
     }
 
-    // Use OSRM trip endpoint for optimized route (traveling salesman)
-    // roundtrip=false means don't return to start
-    // source=first means start from the first point (user location)
-    const url = `https://router.project-osrm.org/trip/v1/driving/${coords.join(';')}?overview=full&geometries=geojson&roundtrip=false&source=first`;
+    // Use OSRM route endpoint to respect the exact order of waypoints
+    // (Unlike /trip which reorders for optimization)
+    const url = `https://router.project-osrm.org/route/v1/driving/${coords.join(';')}?overview=full&geometries=geojson`;
     
     console.log('Fetching route from OSRM:', url);
     
@@ -71,13 +71,13 @@ export const getOptimizedRoute = async (
     }
 
     // Extract the route geometry
-    const trip = data.trips?.[0];
-    if (!trip) {
+    const route = data.routes?.[0];
+    if (!route) {
       return { success: false, error: 'No route found' };
     }
 
     // Convert GeoJSON coordinates [lng, lat] to our format { latitude, longitude }
-    const routeCoordinates = trip.geometry.coordinates.map(
+    const routeCoordinates = route.geometry.coordinates.map(
       (coord: [number, number]) => ({
         latitude: coord[1],
         longitude: coord[0],
@@ -87,8 +87,8 @@ export const getOptimizedRoute = async (
     return {
       success: true,
       coordinates: routeCoordinates,
-      duration: trip.duration, // seconds
-      distance: trip.distance, // meters
+      duration: route.duration, // seconds
+      distance: route.distance, // meters
     };
   } catch (error) {
     console.error('Routing error:', error);

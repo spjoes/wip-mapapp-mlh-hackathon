@@ -1,14 +1,9 @@
 const AGENT_BASE_URL = 'https://x67fwrdyhpkt4c7tgysnlbxo.agents.do-ai.run';
 
-let apiKey: string | null = null;
+// Read API key from environment variable
+const apiKey = process.env.EXPO_PUBLIC_DO_AGENT_API_KEY || null;
 
-export const setAgentApiKey = (key: string) => {
-  apiKey = key;
-};
-
-export const getAgentApiKey = () => apiKey;
-
-export const hasApiKey = () => !!apiKey;
+export const hasApiKey = () => !!apiKey && apiKey !== 'your_do_agent_api_key_here';
 
 interface AgentMessage {
   role: 'system' | 'user' | 'assistant';
@@ -24,7 +19,8 @@ interface AgentResponse {
 export const sendAgentMessage = async (
   systemPrompt: string,
   userMessage: string,
-  locationContext?: { latitude: number; longitude: number }
+  locationContext?: { latitude: number; longitude: number },
+  nearbyPlacesContext?: string
 ): Promise<AgentResponse> => {
   if (!apiKey) {
     return { success: false, error: 'API key not configured' };
@@ -36,11 +32,18 @@ export const sendAgentMessage = async (
       { role: 'system', content: systemPrompt },
     ];
 
-    // Add location context if available
-    let contextualMessage = userMessage;
+    // Build contextual message with location and nearby places
+    let contextualMessage = '';
+    
     if (locationContext) {
-      contextualMessage = `[User's current location: ${locationContext.latitude.toFixed(6)}, ${locationContext.longitude.toFixed(6)}]\n\n${userMessage}`;
+      contextualMessage += `[User's current location: ${locationContext.latitude.toFixed(6)}, ${locationContext.longitude.toFixed(6)}]\n\n`;
     }
+    
+    if (nearbyPlacesContext) {
+      contextualMessage += `[NEARBY PLACES - You MUST only recommend places from this list and use their exact coordinates:]\n${nearbyPlacesContext}\n\n`;
+    }
+    
+    contextualMessage += userMessage;
 
     messages.push({ role: 'user', content: contextualMessage });
 

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView, BottomSheetView } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -29,7 +29,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-import { hasApiKey, sendAgentMessage, setAgentApiKey } from '@/services/agent';
+import { hasApiKey, sendAgentMessage } from '@/services/agent';
+import { formatPlacesForAI, hasFoursquareApiKey, searchNearbyPlaces } from '@/services/places';
 import { formatDistance, formatDuration, getOptimizedRoute } from '@/services/routing';
 
 interface Guide {
@@ -47,11 +48,33 @@ interface Place {
   description: string;
   lat: number;
   lng: number;
+  price: 'Free' | '$' | '$$' | '$$$';
+  duration: string; // e.g., "30 min", "1-2 hours", "Half day"
 }
 
 interface AgentResponseData {
   message: string;
   places: Place[];
+}
+
+interface JourneyStep {
+  type: 'place' | 'walking';
+  // For 'place' type
+  place?: Place;
+  funFacts?: string[];
+  connectionToNext?: string;
+  // For 'walking' type
+  fromPlace?: string;
+  toPlace?: string;
+  walkingTime?: string;
+  walkingDescription?: string; // What to look for while walking
+}
+
+interface JourneyContent {
+  title: string;
+  introduction: string;
+  steps: JourneyStep[];
+  totalTime: string;
 }
 
 const RESPONSE_FORMAT_INSTRUCTIONS = `
@@ -64,10 +87,16 @@ IMPORTANT: You must respond with a valid JSON object in this exact format:
       "name": "Place Name",
       "description": "Brief description of why to visit",
       "lat": 12.345678,
-      "lng": -98.765432
+      "lng": -98.765432,
+      "price": "$",
+      "duration": "1-2 hours"
     }
   ]
 }
+
+For each place:
+- "price": Estimate the cost as "Free", "$" (budget), "$$" (moderate), or "$$$" (expensive)
+- "duration": How long to enjoy/visit, e.g. "30 min", "1-2 hours", "2-3 hours", "Half day"
 
 Include 3-5 places in your response. The coordinates should be real, accurate GPS coordinates for the locations you recommend. Only respond with the JSON object, no other text.`;
 
@@ -136,10 +165,11 @@ export default function HomeScreen() {
   const [promptText, setPromptText] = useState('');
   const [permissionStatus, setPermissionStatus] = useState<'pending' | 'granted' | 'denied'>('pending');
   
+  // Track guide usage order (most recent first)
+  const [guideUsageOrder, setGuideUsageOrder] = useState<string[]>([]);
+  
   // Agent state
   const [isLoading, setIsLoading] = useState(false);
-  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
   const [showResponseModal, setShowResponseModal] = useState(false);
   const [agentResponse, setAgentResponse] = useState<AgentResponseData | null>(null);
   const [selectedPlaces, setSelectedPlaces] = useState<Set<number>>(new Set());
@@ -149,9 +179,37 @@ export default function HomeScreen() {
   const [routeCoordinates, setRouteCoordinates] = useState<{ latitude: number; longitude: number }[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ duration: number; distance: number } | null>(null);
   const [isItineraryExpanded, setIsItineraryExpanded] = useState(false);
+  
+  // Journey mode state
+  const [isJourneyMode, setIsJourneyMode] = useState(false);
+  const [journeyContent, setJourneyContent] = useState<JourneyContent | null>(null);
+  const [isGeneratingJourney, setIsGeneratingJourney] = useState(false);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
   // Snap points for the bottom sheet
   const snapPoints = useMemo(() => ['38%', '65%', '90%'], []);
+
+  // Sort guides by usage order (most recently used first)
+  const sortedGuides = useMemo(() => {
+    if (guideUsageOrder.length === 0) return GUIDES;
+    
+    return [...GUIDES].sort((a, b) => {
+      const aIndex = guideUsageOrder.indexOf(a.id);
+      const bIndex = guideUsageOrder.indexOf(b.id);
+      
+      // If neither has been used, keep original order
+      if (aIndex === -1 && bIndex === -1) return 0;
+      // If only a hasn't been used, b comes first
+      if (aIndex === -1) return 1;
+      // If only b hasn't been used, a comes first
+      if (bIndex === -1) return -1;
+      // Both have been used, sort by index (lower = more recent)
+      return aIndex - bIndex;
+    });
+  }, [guideUsageOrder]);
+
+  // The most recently used guide ID (for showing "Last used!" badge)
+  const lastUsedGuideId = guideUsageOrder.length > 0 ? guideUsageOrder[0] : null;
 
   useEffect(() => {
     requestLocationPermission();
@@ -177,26 +235,6 @@ export default function HomeScreen() {
         setRouteCoordinates(result.coordinates);
         if (result.duration !== undefined && result.distance !== undefined) {
           setRouteInfo({ duration: result.duration, distance: result.distance });
-        }
-        
-        // Fit map to show all points
-        if (mapRef.current && result.coordinates.length > 0) {
-          const allPoints = [...result.coordinates];
-          if (userLoc) {
-            allPoints.unshift(userLoc);
-          }
-          
-          setTimeout(() => {
-            mapRef.current?.fitToCoordinates(allPoints, {
-              edgePadding: { 
-                top: 100, 
-                right: 50, 
-                bottom: SCREEN_HEIGHT * 0.45, 
-                left: 50 
-              },
-              animated: true,
-            });
-          }, 300);
         }
       }
     };
@@ -236,31 +274,28 @@ export default function HomeScreen() {
   const handleLetsGo = async () => {
     if (!selectedGuide || isLoading) return;
 
-    // Check if API key is configured
-    if (!hasApiKey()) {
-      setShowApiKeyModal(true);
+    // Check if API keys are configured in .env
+    if (!hasApiKey() || !hasFoursquareApiKey()) {
+      Alert.alert(
+        'API Keys Missing',
+        'Please add your API keys to the .env file:\n\n• EXPO_PUBLIC_DO_AGENT_API_KEY\n• EXPO_PUBLIC_FOURSQUARE_API_KEY\n\nThen restart the app.',
+        [{ text: 'OK' }]
+      );
       return;
     }
 
-    await startAgentConversation();
-  };
-
-  const handleSaveApiKey = async () => {
-    if (!apiKeyInput.trim()) {
-      Alert.alert('Error', 'Please enter an API key');
-      return;
-    }
-    setAgentApiKey(apiKeyInput.trim());
-    setShowApiKeyModal(false);
-    setApiKeyInput('');
-    
-    // Start the conversation after saving key
     await startAgentConversation();
   };
 
   const startAgentConversation = async () => {
     const guide = GUIDES.find(g => g.id === selectedGuide);
     if (!guide) return;
+
+    // Track this guide as most recently used
+    setGuideUsageOrder(prev => {
+      const filtered = prev.filter(id => id !== guide.id);
+      return [guide.id, ...filtered];
+    });
 
     setIsLoading(true);
 
@@ -274,10 +309,29 @@ export default function HomeScreen() {
       ? { latitude: location.coords.latitude, longitude: location.coords.longitude }
       : undefined;
 
+    // Fetch nearby places from Foursquare
+    let nearbyPlacesContext: string | undefined;
+    if (locationContext && hasFoursquareApiKey()) {
+      const placesResult = await searchNearbyPlaces({
+        latitude: locationContext.latitude,
+        longitude: locationContext.longitude,
+        guideType: guide.id,
+        query: promptText.trim() || undefined,
+        radius: 10000, // 10km radius
+        limit: 25,
+      });
+
+      if (placesResult.success && placesResult.places) {
+        nearbyPlacesContext = formatPlacesForAI(placesResult.places);
+        console.log('Found nearby places for AI context');
+      }
+    }
+
     const response = await sendAgentMessage(
       guide.personality,
       userMessage,
-      locationContext
+      locationContext,
+      nearbyPlacesContext
     );
 
     setIsLoading(false);
@@ -288,7 +342,6 @@ export default function HomeScreen() {
         const parsed: AgentResponseData = JSON.parse(response.message);
         setAgentResponse(parsed);
         setShowResponseModal(true);
-        setPromptText(''); // Clear the input after successful response
       } catch (parseError) {
         // If JSON parsing fails, show as plain text
         console.error('Failed to parse agent response as JSON:', parseError);
@@ -297,7 +350,6 @@ export default function HomeScreen() {
           places: [] 
         });
         setShowResponseModal(true);
-        setPromptText('');
       }
     } else {
       Alert.alert(
@@ -343,6 +395,116 @@ export default function HomeScreen() {
     setShowResponseModal(false);
     setSelectedPlaces(new Set());
     setAgentResponse(null);
+  };
+
+  const generateJourneyContent = async () => {
+    if (itinerary.length === 0) return;
+    
+    setIsGeneratingJourney(true);
+    
+    // Build a prompt for the AI to generate journey content
+    const placesDescription = itinerary.map((place, idx) => 
+      `${idx + 1}. "${place.name}" - ${place.description} (${place.duration}, ${place.price})`
+    ).join('\n');
+
+    const locationContext = location 
+      ? { latitude: location.coords.latitude, longitude: location.coords.longitude }
+      : undefined;
+
+    const journeyPrompt = `You are creating an engaging walking tour guide. The user has planned this itinerary:
+
+${placesDescription}
+
+Generate a detailed journey guide with:
+1. An exciting introduction to set the mood
+2. For each place: 2-3 fun facts and how it connects to the next destination
+3. For walks between places: interesting things to look for (architecture styles, street art, local culture, historical buildings, etc.)
+
+Respond with this exact JSON format:
+{
+  "title": "A catchy title for this journey",
+  "introduction": "An engaging 2-3 sentence introduction that gets the user excited",
+  "steps": [
+    {
+      "type": "place",
+      "placeIndex": 0,
+      "funFacts": ["Fun fact 1", "Fun fact 2"],
+      "connectionToNext": "How this place connects to the next (if not last stop)"
+    },
+    {
+      "type": "walking",
+      "fromIndex": 0,
+      "toIndex": 1,
+      "walkingDescription": "What to look for while walking - architecture, murals, street life, etc."
+    }
+  ],
+  "totalTime": "Estimated total time including walks and visits"
+}
+
+Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
+
+    const response = await sendAgentMessage(
+      'You are an enthusiastic local tour guide who knows fascinating stories about every corner of the city.',
+      journeyPrompt,
+      locationContext
+    );
+
+    setIsGeneratingJourney(false);
+
+    if (response.success && response.message) {
+      try {
+        const parsed = JSON.parse(response.message);
+        
+        // Transform the parsed response to include actual place data
+        const steps: JourneyStep[] = [];
+        
+        for (const step of parsed.steps) {
+          if (step.type === 'place') {
+            const place = itinerary[step.placeIndex];
+            if (place) {
+              steps.push({
+                type: 'place',
+                place,
+                funFacts: step.funFacts || [],
+                connectionToNext: step.connectionToNext,
+              });
+            }
+          } else if (step.type === 'walking') {
+            const fromPlace = itinerary[step.fromIndex];
+            const toPlace = itinerary[step.toIndex];
+            if (fromPlace && toPlace) {
+              steps.push({
+                type: 'walking',
+                fromPlace: fromPlace.name,
+                toPlace: toPlace.name,
+                walkingDescription: step.walkingDescription,
+                walkingTime: '5-10 min', // Could calculate from route data
+              });
+            }
+          }
+        }
+
+        setJourneyContent({
+          title: parsed.title || 'Your Journey',
+          introduction: parsed.introduction || 'Get ready for an amazing adventure!',
+          steps,
+          totalTime: parsed.totalTime || routeInfo ? formatDuration(routeInfo!.duration) : 'Varies',
+        });
+        setIsJourneyMode(true);
+        setCurrentStepIndex(0);
+      } catch (e) {
+        console.error('Failed to parse journey content:', e);
+        Alert.alert('Error', 'Failed to generate journey guide. Please try again.');
+      }
+    } else {
+      Alert.alert('Error', 'Failed to generate journey guide. Please try again.');
+    }
+  };
+
+  const exitJourneyMode = () => {
+    setIsJourneyMode(false);
+    setJourneyContent(null);
+    setCurrentStepIndex(0);
   };
 
   const handleSheetChanges = useCallback((index: number) => {
@@ -543,138 +705,224 @@ export default function HomeScreen() {
         enablePanDownToClose={false}
         enableOverDrag={true}
       >
-        <BottomSheetView style={[styles.sheetContent, { paddingBottom: insets.bottom + 16 }]}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.greeting}>Ready to explore?</Text>
-            <Text style={styles.subGreeting}>Your AI travel companions are here to help</Text>
-          </View>
-
-          {/* Prompt Input */}
-          <View style={styles.promptContainer}>
-            <View style={styles.inputWrapper}>
-              <Ionicons name="sparkles" size={20} color="#8B5CF6" style={styles.inputIcon} />
-              <TextInput
-                style={styles.promptInput}
-                placeholder="What would you like to do today?"
-                placeholderTextColor="#9CA3AF"
-                value={promptText}
-                onChangeText={setPromptText}
-                multiline={false}
-              />
+        {isJourneyMode && journeyContent ? (
+          /* Journey Mode - Use BottomSheetScrollView directly */
+          <BottomSheetScrollView 
+            style={[styles.sheetContent, { paddingBottom: insets.bottom + 16 }]}
+            contentContainerStyle={styles.journeyScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Journey Header */}
+            <View style={styles.journeyHeader}>
+              <View style={styles.journeyTitleRow}>
+                <Ionicons name="footsteps" size={24} color="#8B5CF6" />
+                <Text style={styles.journeyTitle}>{journeyContent.title}</Text>
+              </View>
+              <TouchableOpacity onPress={exitJourneyMode} style={styles.exitJourneyButton}>
+                <Ionicons name="close-circle" size={24} color="#94A3B8" />
+              </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Guide Selection */}
-          <View style={styles.guidesSection}>
-            <Text style={styles.guidesTitle}>Choose your guide</Text>
-            <View style={styles.guidesContainer}>
-              {GUIDES.map((guide) => (
-                <TouchableOpacity
-                  key={guide.id}
-                  style={[
-                    styles.guideCard,
-                    selectedGuide === guide.id && styles.guideCardSelected,
-                    selectedGuide === guide.id && { borderColor: guide.color },
-                  ]}
-                  onPress={() => handleGuideSelect(guide.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.guideIconContainer, { backgroundColor: guide.color + '20' }]}>
-                    <Ionicons name={guide.icon} size={24} color={guide.color} />
-                  </View>
-                  <Text style={styles.guideName}>{guide.name}</Text>
-                  <Text style={styles.guideDescription}>{guide.description}</Text>
-                  {selectedGuide === guide.id && (
-                    <View style={[styles.selectedIndicator, { backgroundColor: guide.color }]}>
-                      <Ionicons name="checkmark" size={12} color="#FFF" />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
+            
+            <Text style={styles.journeyIntro}>{journeyContent.introduction}</Text>
+            
+            <View style={styles.journeyMetaRow}>
+              <View style={styles.journeyMetaItem}>
+                <Ionicons name="location" size={16} color="#10B981" />
+                <Text style={styles.journeyMetaText}>{itinerary.length} stops</Text>
+              </View>
+              <View style={styles.journeyMetaItem}>
+                <Ionicons name="time" size={16} color="#F59E0B" />
+                <Text style={styles.journeyMetaText}>{journeyContent.totalTime}</Text>
+              </View>
             </View>
 
-            {/* Let's Go Button */}
-            <TouchableOpacity
-              style={[
-                styles.letsGoButton,
-                (!selectedGuide || isLoading) && styles.letsGoButtonDisabled,
-              ]}
-              onPress={handleLetsGo}
-              disabled={!selectedGuide || isLoading}
-              activeOpacity={0.8}
-            >
-              {isLoading ? (
-                <>
-                  <ActivityIndicator size="small" color="#FFF" />
-                  <Text style={styles.letsGoButtonText}>Connecting...</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={[
-                    styles.letsGoButtonText,
-                    !selectedGuide && styles.letsGoButtonTextDisabled,
+            {/* Journey Steps */}
+            {journeyContent.steps.map((step, index) => (
+              <View key={index}>
+                {step.type === 'place' && step.place && (
+                  <View style={[
+                    styles.journeyPlaceCard,
+                    currentStepIndex === index && styles.journeyPlaceCardActive
                   ]}>
-                    Let's go!
-                  </Text>
-                  <Ionicons 
-                    name="arrow-forward-circle" 
-                    size={22} 
-                    color={selectedGuide ? '#FFF' : '#64748B'} 
-                  />
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </BottomSheetView>
-      </BottomSheet>
+                    <View style={styles.journeyPlaceHeader}>
+                      <View style={styles.journeyStepNumber}>
+                        <Text style={styles.journeyStepNumberText}>
+                          {journeyContent.steps.filter((s, i) => s.type === 'place' && i <= index).length}
+                        </Text>
+                      </View>
+                      <View style={styles.journeyPlaceInfo}>
+                        <Text style={styles.journeyPlaceName}>{step.place.name}</Text>
+                        <View style={styles.journeyPlaceMeta}>
+                          <Text style={styles.journeyPlaceMetaText}>{step.place.duration}</Text>
+                          <Text style={styles.journeyPlaceMetaDot}>•</Text>
+                          <Text style={styles.journeyPlaceMetaText}>{step.place.price}</Text>
+                        </View>
+                      </View>
+                    </View>
+                    
+                    {step.funFacts && step.funFacts.length > 0 && (
+                      <View style={styles.funFactsContainer}>
+                        <Text style={styles.funFactsTitle}>
+                          <Ionicons name="bulb" size={14} color="#F59E0B" /> Fun Facts
+                        </Text>
+                        {step.funFacts.map((fact, factIndex) => (
+                          <Text key={factIndex} style={styles.funFactText}>• {fact}</Text>
+                        ))}
+                      </View>
+                    )}
+                    
+                    {step.connectionToNext && (
+                      <View style={styles.connectionContainer}>
+                        <Ionicons name="link" size={14} color="#8B5CF6" />
+                        <Text style={styles.connectionText}>{step.connectionToNext}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+                
+                {step.type === 'walking' && (
+                  <View style={styles.walkingCard}>
+                    <View style={styles.walkingIconContainer}>
+                      <Ionicons name="walk" size={20} color="#64748B" />
+                    </View>
+                    <View style={styles.walkingContent}>
+                      <Text style={styles.walkingTitle}>
+                        Walk to {step.toPlace}
+                      </Text>
+                      {step.walkingDescription && (
+                        <Text style={styles.walkingDescription}>
+                          <Ionicons name="eye" size={12} color="#94A3B8" /> {step.walkingDescription}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+              </View>
+            ))}
+          </BottomSheetScrollView>
+        ) : (
+          /* Planning Mode - Use BottomSheetView */
+          <BottomSheetView style={[styles.sheetContent, { paddingBottom: insets.bottom + 16 }]}>
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.greeting}>
+                {itinerary.length > 0 ? 'Your trip is ready!' : 'Ready to explore?'}
+              </Text>
+              <Text style={styles.subGreeting}>
+                {itinerary.length > 0 
+                  ? `${itinerary.length} places in your itinerary` 
+                  : 'Your AI travel companions are here to help'}
+              </Text>
+            </View>
 
-      {/* API Key Modal */}
-      <Modal
-        visible={showApiKeyModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowApiKeyModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}>
-            <View style={styles.modalHeader}>
-              <Ionicons name="key-outline" size={28} color="#8B5CF6" />
-              <Text style={styles.modalTitle}>API Key Required</Text>
-            </View>
-            <Text style={styles.modalSubtitle}>
-              Enter your Digital Ocean Agent API key to connect with your AI travel guides.
-            </Text>
-            <TextInput
-              style={styles.apiKeyInput}
-              placeholder="Enter your API key..."
-              placeholderTextColor="#64748B"
-              value={apiKeyInput}
-              onChangeText={setApiKeyInput}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <View style={styles.modalButtons}>
+            {/* Start Journey Button - Only show when itinerary has places */}
+            {itinerary.length > 0 && (
               <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => {
-                  setShowApiKeyModal(false);
-                  setApiKeyInput('');
-                }}
+                style={styles.startJourneyButton}
+                onPress={generateJourneyContent}
+                disabled={isGeneratingJourney}
+                activeOpacity={0.8}
               >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                {isGeneratingJourney ? (
+                  <>
+                    <ActivityIndicator size="small" color="#FFF" />
+                    <Text style={styles.startJourneyButtonText}>Creating your guide...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="footsteps" size={22} color="#FFF" />
+                    <Text style={styles.startJourneyButtonText}>Start Journey</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                  </>
+                )}
               </TouchableOpacity>
+            )}
+
+            {/* Prompt Input */}
+            <View style={styles.promptContainer}>
+              <View style={styles.inputWrapper}>
+                <Ionicons name="sparkles" size={20} color="#8B5CF6" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.promptInput}
+                  placeholder="What would you like to do today?"
+                  placeholderTextColor="#9CA3AF"
+                  value={promptText}
+                  onChangeText={setPromptText}
+                  multiline={false}
+                />
+              </View>
+            </View>
+
+            {/* Guide Selection */}
+            <View style={styles.guidesSection}>
+              <Text style={styles.guidesTitle}>Choose your guide</Text>
+              <View style={styles.guidesContainer}>
+                {sortedGuides.map((guide) => (
+                  <TouchableOpacity
+                    key={guide.id}
+                    style={[
+                      styles.guideCard,
+                      selectedGuide === guide.id && styles.guideCardSelected,
+                      selectedGuide === guide.id && { borderColor: guide.color },
+                    ]}
+                    onPress={() => handleGuideSelect(guide.id)}
+                    activeOpacity={0.7}
+                  >
+                    {/* Last used badge - only show on most recently used guide */}
+                    {lastUsedGuideId === guide.id && (
+                      <View style={styles.lastUsedBadge}>
+                        <Text style={styles.lastUsedText}>Last used!</Text>
+                      </View>
+                    )}
+                    <View style={[styles.guideIconContainer, { backgroundColor: guide.color + '20' }]}>
+                      <Ionicons name={guide.icon} size={24} color={guide.color} />
+                    </View>
+                    <Text style={styles.guideName}>{guide.name}</Text>
+                    <Text style={styles.guideDescription}>{guide.description}</Text>
+                    {selectedGuide === guide.id && (
+                      <View style={[styles.selectedIndicator, { backgroundColor: guide.color }]}>
+                        <Ionicons name="checkmark" size={12} color="#FFF" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Let's Go Button */}
               <TouchableOpacity
-                style={styles.modalSaveButton}
-                onPress={handleSaveApiKey}
+                style={[
+                  styles.letsGoButton,
+                  (!selectedGuide || isLoading) && styles.letsGoButtonDisabled,
+                ]}
+                onPress={handleLetsGo}
+                disabled={!selectedGuide || isLoading}
+                activeOpacity={0.8}
               >
-                <Text style={styles.modalSaveButtonText}>Save & Connect</Text>
+                {isLoading ? (
+                  <>
+                    <ActivityIndicator size="small" color="#FFF" />
+                    <Text style={styles.letsGoButtonText}>Connecting...</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={[
+                      styles.letsGoButtonText,
+                      !selectedGuide && styles.letsGoButtonTextDisabled,
+                    ]}>
+                      {itinerary.length > 0 ? 'Add more places' : "Let's go!"}
+                    </Text>
+                    <Ionicons 
+                      name="arrow-forward-circle" 
+                      size={22} 
+                      color={selectedGuide ? '#FFF' : '#64748B'} 
+                    />
+                  </>
+                )}
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </BottomSheetView>
+        )}
+      </BottomSheet>
 
       {/* Response Modal */}
       <Modal
@@ -749,9 +997,32 @@ export default function HomeScreen() {
                               )}
                             </View>
                             <Text style={styles.placeDescription}>{place.description}</Text>
-                            <Text style={styles.placeCoords}>
-                              📍 {place.lat.toFixed(6)}, {place.lng.toFixed(6)}
-                            </Text>
+                            <View style={styles.placeFooter}>
+                              <Text style={styles.placeCoords}>
+                                📍 {place.lat.toFixed(6)}, {place.lng.toFixed(6)}
+                              </Text>
+                              <View style={styles.placeMetaContainer}>
+                                {place.duration && (
+                                  <View style={styles.placeMetaBadge}>
+                                    <Ionicons name="time-outline" size={12} color="#F59E0B" />
+                                    <Text style={styles.placeMetaText}>{place.duration}</Text>
+                                  </View>
+                                )}
+                                {place.price && (
+                                  <View style={[
+                                    styles.placeMetaBadge,
+                                    place.price === 'Free' && styles.placeMetaBadgeFree
+                                  ]}>
+                                    <Text style={[
+                                      styles.placeMetaText,
+                                      place.price === 'Free' && styles.placeMetaTextFree
+                                    ]}>
+                                      {place.price}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
                           </TouchableOpacity>
                         );
                       })}
@@ -1065,6 +1336,23 @@ const styles = StyleSheet.create({
   guideCardSelected: {
     backgroundColor: '#1E293B',
   },
+  lastUsedBadge: {
+    position: 'absolute',
+    top: -8,
+    left: 8,
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    zIndex: 1,
+  },
+  lastUsedText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   guideIconContainer: {
     width: 44,
     height: 44,
@@ -1116,76 +1404,6 @@ const styles = StyleSheet.create({
   },
   letsGoButtonTextDisabled: {
     color: '#64748B',
-  },
-  // API Key Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#1E293B',
-    borderRadius: 24,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#F8FAFC',
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: '#94A3B8',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  apiKeyInput: {
-    backgroundColor: '#0F172A',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 20,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  modalCancelButton: {
-    flex: 1,
-    backgroundColor: '#334155',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  modalCancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
-  modalSaveButton: {
-    flex: 1,
-    backgroundColor: '#8B5CF6',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  modalSaveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFF',
   },
   // Response Modal Styles
   responseModalOverlay: {
@@ -1281,10 +1499,41 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 8,
   },
+  placeFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
   placeCoords: {
     fontSize: 12,
     color: '#64748B',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    flex: 1,
+  },
+  placeMetaContainer: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+  },
+  placeMetaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#334155',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 4,
+  },
+  placeMetaBadgeFree: {
+    backgroundColor: '#10B98120',
+  },
+  placeMetaText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#CBD5E1',
+  },
+  placeMetaTextFree: {
+    color: '#10B981',
   },
   addToItineraryButton: {
     flexDirection: 'row',
@@ -1317,5 +1566,181 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#94A3B8',
+  },
+  // Start Journey Button
+  startJourneyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    borderRadius: 16,
+    paddingVertical: 16,
+    marginBottom: 20,
+    gap: 10,
+  },
+  startJourneyButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  // Journey Mode Styles
+  journeyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  journeyTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  journeyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#F8FAFC',
+    flex: 1,
+  },
+  exitJourneyButton: {
+    padding: 4,
+  },
+  journeyIntro: {
+    fontSize: 15,
+    color: '#CBD5E1',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  journeyMetaRow: {
+    flexDirection: 'row',
+    gap: 20,
+    marginBottom: 20,
+  },
+  journeyMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  journeyMetaText: {
+    fontSize: 14,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  journeyScrollContent: {
+    paddingBottom: 40,
+  },
+  journeyPlaceCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  journeyPlaceCardActive: {
+    borderColor: '#8B5CF6',
+  },
+  journeyPlaceHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12,
+  },
+  journeyStepNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  journeyStepNumberText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  journeyPlaceInfo: {
+    flex: 1,
+  },
+  journeyPlaceName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#F8FAFC',
+    marginBottom: 4,
+  },
+  journeyPlaceMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  journeyPlaceMetaText: {
+    fontSize: 13,
+    color: '#94A3B8',
+  },
+  journeyPlaceMetaDot: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  funFactsContainer: {
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  funFactsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#F59E0B',
+    marginBottom: 8,
+  },
+  funFactText: {
+    fontSize: 13,
+    color: '#CBD5E1',
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  connectionContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+  },
+  connectionText: {
+    fontSize: 13,
+    color: '#A78BFA',
+    fontStyle: 'italic',
+    flex: 1,
+    lineHeight: 18,
+  },
+  walkingCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    gap: 12,
+  },
+  walkingIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#334155',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  walkingContent: {
+    flex: 1,
+  },
+  walkingTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#94A3B8',
+    marginBottom: 4,
+  },
+  walkingDescription: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
   },
 });

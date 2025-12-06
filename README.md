@@ -1,50 +1,63 @@
-# Welcome to your Expo app 👋
+# AI Travel Guide Map App 🗺️
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+An Expo React Native app that provides AI-powered travel recommendations with interactive maps and itinerary planning.
 
-## Get started
+## Features
 
-1. Install dependencies
+- **AI Travel Guides** - Choose from three themed AI guides:
+
+  - 🏛️ **The Historian** - History, landmarks, museums, and heritage sites
+  - 🍽️ **Local Foodie** - Restaurants, cafés, street food, and culinary experiences
+  - 🧭 **Adventure Scout** - Outdoor activities, hiking, nature, and adventure sports
+- **Real Place Data** - Fetches nearby venues from Foursquare based on your location
+- **Interactive Map** - View recommended places with numbered markers
+- **Itinerary Builder** - Select places and build a drag-to-reorder itinerary
+- **Route Planning** - See driving routes with duration and distance estimates
+
+## Environment Variables
+
+This app requires API keys to function. Create a `.env` file in the project root:
+
+```env
+# DigitalOcean AI Agent API Key
+# Get this from your DigitalOcean console
+EXPO_PUBLIC_DO_AGENT_API_KEY=your_do_agent_api_key_here
+
+# Foursquare Places API Key
+# Get this from https://foursquare.com/developers
+EXPO_PUBLIC_FOURSQUARE_API_KEY=your_foursquare_api_key_here
+```
+
+## Get Started
+
+1. **Install dependencies**
 
    ```bash
    npm install
    ```
-
-2. Start the app
+2. **Create your `.env` file** (see above)
+3. **Start the app**
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+   Or with tunnel for testing on physical devices:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+   ```bash
+   npx expo start --tunnel
+   ```
+4. **Open the app** using:
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+   - Expo Go app (scan QR code)
+   - iOS Simulator
+   - Android Emulator
 
-## Get a fresh project
+## Tech Stack
 
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- **Expo SDK 54** - React Native framework
+- **Expo Router** - File-based navigation
+- **React Native Maps** - Interactive maps
+- **@gorhom/bottom-sheet** - Bottom sheet UI
+- **react-native-draggable-flatlist** - Drag-to-reorder lists
+- **OSRM** - Open source routing (no API key required)
