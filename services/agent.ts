@@ -39,27 +39,30 @@ export const sendAgentMessage = async (
       contextualMessage += `[USER LOCATION: ${locationContext.latitude.toFixed(6)}, ${locationContext.longitude.toFixed(6)}]\n\n`;
     }
     
-    if (nearbyPlacesContext && nearbyPlacesContext !== 'No nearby places found.') {
-      contextualMessage += `[NEARBY PLACES FROM DATABASE - STRONGLY PREFER these places and use their EXACT coordinates:]
-${nearbyPlacesContext}
+    // Streamlined instructions - find venues quickly, coordinates will be geocoded after
+    contextualMessage += `INSTRUCTIONS FOR FINDING PLACES:
 
-IMPORTANT INSTRUCTIONS:
-1. FIRST, look through the places above and pick ones that match your guide expertise
-2. Use the EXACT coordinates provided - do NOT make up coordinates
-3. If the list above doesn't have good matches for your guide type(s), you MUST use your web_search tool to find appropriate real venues near the user's location
-4. NEVER recommend generic/famous landmarks unless they truly fit the guide personalities selected
-5. Each recommended place MUST align with at least one of the selected guide types
+Use ONE web_search to find real venues near the user that match your guide expertise.
+Example search: "best speakeasies arcade bars quirky museums San Francisco"
+
+GUIDE TYPES TO MATCH:
+- Tech Guru: gaming cafes, VR arcades, hackerspaces, tech museums
+- Night Owl: speakeasies, rooftop bars, jazz clubs, comedy clubs
+- Local Oddball: weird museums, themed bars, escape rooms, oddity shops
+- Historian: historical landmarks, heritage sites, museums
+- Foodie: restaurants, food markets, local eateries
+- Adventurer: outdoor activities, hiking spots, nature areas
+- Architect: notable buildings, architectural landmarks
+- Artist: galleries, murals, creative spaces
+- Sports Buff: stadiums, sports bars, athletic venues
+
+IMPORTANT:
+- DO NOT search for coordinates - just provide approximate ones, we will verify them
+- Focus on finding REAL venue names that match the guide types
+- Do ONE comprehensive search, not multiple searches
+- Respond quickly with 3-5 great recommendations
 
 `;
-    } else {
-      // No places found from Foursquare - instruct AI to use web search
-      contextualMessage += `[NO PLACES FOUND IN DATABASE]
-You MUST use your web_search tool to find real venues near the user's location that match your guide expertise.
-Search for specific venue types that fit your guide personality. Get real names, addresses, and coordinates.
-Do NOT make up places or use generic famous landmarks.
-
-`;
-    }
     
     contextualMessage += userMessage;
 

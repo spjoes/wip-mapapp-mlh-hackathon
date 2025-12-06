@@ -32,7 +32,6 @@ import { AccentPickerModal } from '@/components/accent-picker-modal';
 import { PlaceSpeakerButton } from '@/components/place-speaker-button';
 import { JourneyStep as JourneyStepType, useAudioNarration } from '@/hooks/use-audio-narration';
 import { hasApiKey, sendAgentMessage } from '@/services/agent';
-import { formatPlacesForAI, hasFoursquareApiKey, searchNearbyPlaces } from '@/services/places';
 import { formatDistance, formatDuration, getOptimizedRoute } from '@/services/routing';
 
 interface Guide {
@@ -412,11 +411,11 @@ export default function HomeScreen() {
   const handleLetsGo = async () => {
     if (selectedGuides.size === 0 || isLoading) return;
 
-    // Check if API keys are configured in .env
-    if (!hasApiKey() || !hasFoursquareApiKey()) {
+    // Check if API key is configured in .env (Foursquare no longer needed - using web_search)
+    if (!hasApiKey()) {
       Alert.alert(
-        'API Keys Missing',
-        'Please add your API keys to the .env file:\n\n• EXPO_PUBLIC_DO_AGENT_API_KEY\n• EXPO_PUBLIC_FOURSQUARE_API_KEY\n\nThen restart the app.',
+        'API Key Missing',
+        'Please add your DigitalOcean Agent API key to the .env file:\n\n• EXPO_PUBLIC_DO_AGENT_API_KEY\n\nThen restart the app.',
         [{ text: 'OK' }]
       );
       return;
@@ -448,23 +447,10 @@ export default function HomeScreen() {
       ? { latitude: location.coords.latitude, longitude: location.coords.longitude }
       : undefined;
 
-    // Fetch nearby places from Foursquare using ALL selected guide types
-    let nearbyPlacesContext: string | undefined;
-    if (locationContext && hasFoursquareApiKey()) {
-      const placesResult = await searchNearbyPlaces({
-        latitude: locationContext.latitude,
-        longitude: locationContext.longitude,
-        guideTypes: guides.map(g => g.id), // Pass all selected guide types
-        query: promptText.trim() || undefined,
-        radius: 10000, // 10km radius
-        limit: 25,
-      });
-
-      if (placesResult.success && placesResult.places) {
-        nearbyPlacesContext = formatPlacesForAI(placesResult.places);
-        console.log('Found nearby places for AI context');
-      }
-    }
+    // Skip Foursquare - let AI use web_search to find real venues
+    // This produces better results since AI can search for specific venue types
+    const nearbyPlacesContext = undefined;
+    console.log('Skipping Foursquare - AI will use web_search to find venues');
 
     // Combine personalities if multiple guides selected
     let combinedPersonality: string;
@@ -527,21 +513,72 @@ When making recommendations, consider all your combined perspectives and offer p
     });
   };
 
-  const handleAddToItinerary = () => {
+  const handleAddToItinerary = async () => {
     if (!agentResponse || selectedPlaces.size === 0) return;
     
-    // Add unique IDs to each place
-    const placesToAdd = agentResponse.places
-      .filter((_, index) => selectedPlaces.has(index))
-      .map((place, idx) => ({
-        ...place,
-        id: `place-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`,
-      }));
+    // Get the selected places
+    const selectedPlacesData = agentResponse.places
+      .filter((_, index) => selectedPlaces.has(index));
     
-    setItinerary(prev => [...prev, ...placesToAdd]);
-    
-    // Close modal and reset selection
+    // Close modal immediately for better UX, show loading indicator
     setShowResponseModal(false);
+    setIsLoading(true);
+    
+    // Geocode each place to get accurate coordinates using Nominatim (OpenStreetMap)
+    // This fixes the issue of AI generating inaccurate coordinates
+    const geocodedPlaces: Place[] = [];
+    
+    for (let i = 0; i < selectedPlacesData.length; i++) {
+      const place = selectedPlacesData[i];
+      
+      // Rate limit: Nominatim requires 1 second between requests
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1100));
+      }
+      
+      try {
+        // Try to geocode using Nominatim (free, no API key needed)
+        const query = encodeURIComponent(`${place.name}, San Francisco`);
+        const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`;
+        
+        console.log(`Geocoding: "${place.name}"...`);
+        
+        const response = await fetch(url, {
+          headers: { 'User-Agent': 'DetourApp/1.0' },
+        });
+        
+        if (response.ok) {
+          const results = await response.json();
+          
+          if (results.length > 0) {
+            const geocoded = results[0];
+            console.log(`  Found: ${geocoded.display_name} at ${geocoded.lat}, ${geocoded.lon}`);
+            
+            geocodedPlaces.push({
+              ...place,
+              id: `place-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+              lat: parseFloat(geocoded.lat),
+              lng: parseFloat(geocoded.lon),
+            });
+            continue;
+          }
+        }
+      } catch (error) {
+        console.error(`Geocoding failed for "${place.name}":`, error);
+      }
+      
+      // Fallback: use AI's coordinates if geocoding fails
+      console.log(`  Using AI coordinates for "${place.name}"`);
+      geocodedPlaces.push({
+        ...place,
+        id: `place-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+      });
+    }
+    
+    setIsLoading(false);
+    setItinerary(prev => [...prev, ...geocodedPlaces]);
+    
+    // Reset selection
     setSelectedPlaces(new Set());
     setAgentResponse(null);
     
