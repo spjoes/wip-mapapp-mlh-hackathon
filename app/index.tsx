@@ -121,7 +121,7 @@ export default function HomeScreen() {
         mapPadding={{
           top: 0,
           right: 0,
-          bottom: SCREEN_HEIGHT * 0.35,
+          bottom: SCREEN_HEIGHT * 0.45,
           left: 0,
         }}
         initialRegion={{
