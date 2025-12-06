@@ -304,9 +304,6 @@ export default function HomeScreen() {
   // Audio narration hook
   const audioNarration = useAudioNarration();
 
-  // Audio narration hook
-  const audioNarration = useAudioNarration();
-
   // Snap points for the bottom sheet
   // Simplified view: fixed 25%, Journey mode: can expand, Planning mode: medium height
   const snapPoints = useMemo(() => {

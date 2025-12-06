@@ -1,3 +1,5 @@
+import { Audio } from 'expo-av';
+import { sendAgentMessage } from './agent';
 
 // Accent types and configuration
 export type AccentType = 'american' | 'australian' | 'british' | 'scottish' | 'other';
