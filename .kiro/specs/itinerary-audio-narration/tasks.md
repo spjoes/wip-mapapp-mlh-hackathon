@@ -1,0 +1,64 @@
+# Implementation Plan
+
+- [x] 1. Set up audio narration service and types
+  - [x] 1.1 Create accent types and configuration in services/audio-narration.ts
+    - Define AccentType, AccentConfig, and ACCENT_OPTIONS
+    - Set up voice mappings for iOS and Android
+    - _Requirements: 1.1, 4.3_
+  - [x] 1.2 Implement content summarizer function
+    - Create generateNarrationScript function that converts JourneyContent to speech text
+    - Include title, introduction, fun facts, and transitions
+    - _Requirements: 5.1, 5.2, 5.3_
+  - [ ]* 1.3 Write property tests for content summarizer
+    - **Property 6: Summary includes journey elements**
+    - **Property 7: Summary includes fun facts**
+    - **Property 8: Multi-stop transitions**
+    - **Validates: Requirements 5.1, 5.2, 5.3**
+
+- [x] 2. Create useAudioNarration hook
+  - [x] 2.1 Implement core hook with expo-speech integration
+    - Manage isPlaying, selectedAccent state
+    - Implement togglePlayback, setAccent, stopPlayback functions
+    - Handle speech completion callbacks
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+  - [ ]* 2.2 Write property tests for playback state management
+    - **Property 2: Playback state toggle from stopped**
+    - **Property 3: Playback state toggle from playing**
+    - **Property 4: Exit journey stops playback**
+    - **Validates: Requirements 2.1, 2.2, 2.4**
+  - [ ]* 2.3 Write property tests for accent selection
+    - **Property 1: Accent selection persistence**
+    - **Property 5: Accent maps to correct voice**
+    - **Validates: Requirements 1.2, 4.3**
+
+- [x] 3. Build UI components
+  - [x] 3.1 Create SpeakerButton component
+    - Display speaker icon with play/stop visual states
+    - Handle tap for toggle, long-press for accent picker
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [x] 3.2 Create AccentPickerModal component
+    - Display list of 5 accent options
+    - Highlight currently selected accent
+    - Handle selection and close actions
+    - _Requirements: 1.1, 1.2_
+  - [ ]* 3.3 Write unit tests for UI components
+    - Test SpeakerButton renders correct icons for states
+    - Test AccentPickerModal displays all accent options
+    - _Requirements: 3.2, 3.3, 1.1_
+
+- [x] 4. Integrate into journey mode
+  - [x] 4.1 Add speaker button to journey mode header
+    - Position in top-right area when journey mode is active
+    - Wire up to useAudioNarration hook
+    - _Requirements: 3.1_
+  - [x] 4.2 Connect accent picker modal
+    - Show modal on speaker button long-press
+    - Persist accent selection
+    - _Requirements: 1.1, 1.2_
+  - [x] 4.3 Handle journey mode exit cleanup
+    - Stop playback when exiting journey mode
+    - Reset audio state
+    - _Requirements: 2.4_
+
+- [ ] 5. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
