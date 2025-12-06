@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  LayoutAnimation,
   Modal,
   Platform,
   ScrollView,
@@ -13,11 +14,18 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  UIManager,
   View,
 } from 'react-native';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -34,6 +42,7 @@ interface Guide {
 }
 
 interface Place {
+  id: string;
   name: string;
   description: string;
   lat: number;
@@ -139,6 +148,7 @@ export default function HomeScreen() {
   const [itinerary, setItinerary] = useState<Place[]>([]);
   const [routeCoordinates, setRouteCoordinates] = useState<{ latitude: number; longitude: number }[]>([]);
   const [routeInfo, setRouteInfo] = useState<{ duration: number; distance: number } | null>(null);
+  const [isItineraryExpanded, setIsItineraryExpanded] = useState(false);
 
   // Snap points for the bottom sheet
   const snapPoints = useMemo(() => ['38%', '65%', '90%'], []);
@@ -298,11 +308,6 @@ export default function HomeScreen() {
     }
   };
 
-  const handleSubmit = () => {
-    if (!promptText.trim()) return;
-    handleLetsGo();
-  };
-
   const togglePlaceSelection = (index: number) => {
     setSelectedPlaces(prev => {
       const newSet = new Set(prev);
@@ -318,7 +323,14 @@ export default function HomeScreen() {
   const handleAddToItinerary = () => {
     if (!agentResponse || selectedPlaces.size === 0) return;
     
-    const placesToAdd = agentResponse.places.filter((_, index) => selectedPlaces.has(index));
+    // Add unique IDs to each place
+    const placesToAdd = agentResponse.places
+      .filter((_, index) => selectedPlaces.has(index))
+      .map((place, idx) => ({
+        ...place,
+        id: `place-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 9)}`,
+      }));
+    
     setItinerary(prev => [...prev, ...placesToAdd]);
     
     // Close modal and reset selection
@@ -413,38 +425,110 @@ export default function HomeScreen() {
 
       {/* Route Info Card */}
       {itinerary.length > 0 && (
-        <View style={[styles.routeInfoCard, { top: insets.top + 16 }]}>
-          <View style={styles.routeInfoHeader}>
-            <Ionicons name="map" size={18} color="#8B5CF6" />
-            <Text style={styles.routeInfoTitle}>Your Itinerary</Text>
-          </View>
-          <View style={styles.routeInfoDetails}>
-            <View style={styles.routeInfoItem}>
-              <Ionicons name="location" size={14} color="#10B981" />
-              <Text style={styles.routeInfoText}>{itinerary.length} stops</Text>
+        <View style={[
+          styles.routeInfoCard, 
+          { top: insets.top + 16 },
+          isItineraryExpanded && styles.routeInfoCardExpanded
+        ]}>
+          {/* Header - Tappable to expand/collapse */}
+          <TouchableOpacity 
+            style={styles.routeInfoHeaderTouchable}
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setIsItineraryExpanded(!isItineraryExpanded);
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.routeInfoHeader}>
+              <Ionicons name="map" size={18} color="#8B5CF6" />
+              <Text style={styles.routeInfoTitle}>Your Itinerary</Text>
+              <Ionicons 
+                name={isItineraryExpanded ? "chevron-up" : "chevron-down"} 
+                size={18} 
+                color="#94A3B8" 
+                style={styles.expandIcon}
+              />
             </View>
-            {routeInfo && (
-              <>
-                <View style={styles.routeInfoDivider} />
-                <View style={styles.routeInfoItem}>
-                  <Ionicons name="time" size={14} color="#F59E0B" />
-                  <Text style={styles.routeInfoText}>{formatDuration(routeInfo.duration)}</Text>
-                </View>
-                <View style={styles.routeInfoDivider} />
-                <View style={styles.routeInfoItem}>
-                  <Ionicons name="navigate" size={14} color="#8B5CF6" />
-                  <Text style={styles.routeInfoText}>{formatDistance(routeInfo.distance)}</Text>
-                </View>
-              </>
-            )}
-          </View>
+            <View style={styles.routeInfoDetails}>
+              <View style={styles.routeInfoItem}>
+                <Ionicons name="location" size={14} color="#10B981" />
+                <Text style={styles.routeInfoText}>{itinerary.length} stops</Text>
+              </View>
+              {routeInfo && (
+                <>
+                  <View style={styles.routeInfoDivider} />
+                  <View style={styles.routeInfoItem}>
+                    <Ionicons name="time" size={14} color="#F59E0B" />
+                    <Text style={styles.routeInfoText}>{formatDuration(routeInfo.duration)}</Text>
+                  </View>
+                  <View style={styles.routeInfoDivider} />
+                  <View style={styles.routeInfoItem}>
+                    <Ionicons name="navigate" size={14} color="#8B5CF6" />
+                    <Text style={styles.routeInfoText}>{formatDistance(routeInfo.distance)}</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {/* Clear Button */}
           <TouchableOpacity 
             style={styles.clearItineraryButton}
-            onPress={() => setItinerary([])}
+            onPress={() => {
+              setItinerary([]);
+              setIsItineraryExpanded(false);
+            }}
           >
             <Ionicons name="close-circle" size={16} color="#EF4444" />
             <Text style={styles.clearItineraryText}>Clear</Text>
           </TouchableOpacity>
+
+          {/* Expanded Itinerary List */}
+          {isItineraryExpanded && (
+            <View style={styles.itineraryListContainer}>
+              <Text style={styles.itineraryListHint}>
+                <Ionicons name="reorder-three" size={14} color="#64748B" /> Hold and drag to reorder
+              </Text>
+              <DraggableFlatList
+                data={itinerary}
+                onDragEnd={({ data }) => setItinerary(data)}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<Place>) => {
+                  const index = getIndex() ?? 0;
+                  return (
+                    <ScaleDecorator>
+                      <TouchableOpacity
+                        style={[
+                          styles.itineraryItem,
+                          isActive && styles.itineraryItemDragging,
+                        ]}
+                        onLongPress={drag}
+                        disabled={isActive}
+                        delayLongPress={100}
+                      >
+                        <View style={styles.itineraryItemNumber}>
+                          <Text style={styles.itineraryItemNumberText}>{index + 1}</Text>
+                        </View>
+                        <View style={styles.itineraryItemContent}>
+                          <Text style={styles.itineraryItemName} numberOfLines={1}>
+                            {item.name}
+                          </Text>
+                          <Text style={styles.itineraryItemDesc} numberOfLines={1}>
+                            {item.description}
+                          </Text>
+                        </View>
+                        <View style={styles.itineraryItemHandle}>
+                          <Ionicons name="reorder-two" size={20} color="#64748B" />
+                        </View>
+                      </TouchableOpacity>
+                    </ScaleDecorator>
+                  );
+                }}
+                activationDistance={10}
+                containerStyle={styles.draggableContainer}
+              />
+            </View>
+          )}
         </View>
       )}
 
@@ -477,16 +561,7 @@ export default function HomeScreen() {
                 value={promptText}
                 onChangeText={setPromptText}
                 multiline={false}
-                returnKeyType="send"
-                onSubmitEditing={handleSubmit}
               />
-              <TouchableOpacity 
-                style={[styles.sendButton, !promptText.trim() && styles.sendButtonDisabled]}
-                onPress={handleSubmit}
-                disabled={!promptText.trim()}
-              >
-                <Ionicons name="arrow-forward" size={18} color="#FFF" />
-              </TouchableOpacity>
             </View>
           </View>
 
@@ -777,8 +852,8 @@ const styles = StyleSheet.create({
   routeInfoCard: {
     position: 'absolute',
     left: 16,
-    right: 70,
-    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    right: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.98)',
     borderRadius: 16,
     padding: 12,
     shadowColor: '#000',
@@ -788,6 +863,13 @@ const styles = StyleSheet.create({
     elevation: 5,
     borderWidth: 1,
     borderColor: 'rgba(51, 65, 85, 0.5)',
+    maxHeight: SCREEN_HEIGHT * 0.5,
+  },
+  routeInfoCardExpanded: {
+    backgroundColor: 'rgba(15, 23, 42, 0.98)',
+  },
+  routeInfoHeaderTouchable: {
+    paddingRight: 50,
   },
   routeInfoHeader: {
     flexDirection: 'row',
@@ -799,6 +881,10 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 14,
     fontWeight: '600',
+    flex: 1,
+  },
+  expandIcon: {
+    marginLeft: 'auto',
   },
   routeInfoDetails: {
     flexDirection: 'row',
@@ -826,6 +912,72 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  // Expanded Itinerary List
+  itineraryListContainer: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+    paddingTop: 12,
+  },
+  itineraryListHint: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  draggableContainer: {
+    maxHeight: SCREEN_HEIGHT * 0.3,
+  },
+  itineraryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  itineraryItemDragging: {
+    backgroundColor: '#334155',
+    borderColor: '#8B5CF6',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  itineraryItemNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  itineraryItemNumberText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  itineraryItemContent: {
+    flex: 1,
+    marginRight: 8,
+  },
+  itineraryItemName: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  itineraryItemDesc: {
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  itineraryItemHandle: {
+    padding: 4,
   },
   clearItineraryText: {
     color: '#EF4444',
@@ -874,9 +1026,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#1E293B',
     borderRadius: 16,
-    paddingLeft: 16,
-    paddingRight: 6,
-    paddingVertical: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#334155',
   },
@@ -888,15 +1039,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#F8FAFC',
     paddingVertical: 10,
-  },
-  sendButton: {
-    backgroundColor: '#8B5CF6',
-    borderRadius: 12,
-    padding: 12,
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#4C1D95',
-    opacity: 0.5,
   },
   guidesSection: {
     flex: 1,
