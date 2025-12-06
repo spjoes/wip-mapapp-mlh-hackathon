@@ -649,11 +649,15 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
           {isItineraryExpanded && (
             <View style={styles.itineraryListContainer}>
               <Text style={styles.itineraryListHint}>
-                <Ionicons name="reorder-three" size={14} color="#64748B" /> Hold and drag to reorder
+                {isJourneyMode ? (
+                  <><Ionicons name="lock-closed" size={14} color="#64748B" /> Exit journey to reorder</>
+                ) : (
+                  <><Ionicons name="reorder-three" size={14} color="#64748B" /> Hold and drag to reorder</>
+                )}
               </Text>
               <DraggableFlatList
                 data={itinerary}
-                onDragEnd={({ data }) => setItinerary(data)}
+                onDragEnd={({ data }) => !isJourneyMode && setItinerary(data)}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<Place>) => {
                   const index = getIndex() ?? 0;
@@ -664,8 +668,8 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
                           styles.itineraryItem,
                           isActive && styles.itineraryItemDragging,
                         ]}
-                        onLongPress={drag}
-                        disabled={isActive}
+                        onLongPress={isJourneyMode ? undefined : drag}
+                        disabled={isActive || isJourneyMode}
                         delayLongPress={100}
                       >
                         <View style={styles.itineraryItemNumber}>
@@ -679,9 +683,11 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
                             {item.description}
                           </Text>
                         </View>
-                        <View style={styles.itineraryItemHandle}>
-                          <Ionicons name="reorder-two" size={20} color="#64748B" />
-                        </View>
+                        {!isJourneyMode && (
+                          <View style={styles.itineraryItemHandle}>
+                            <Ionicons name="reorder-two" size={20} color="#64748B" />
+                          </View>
+                        )}
                       </TouchableOpacity>
                     </ScaleDecorator>
                   );
