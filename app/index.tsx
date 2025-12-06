@@ -606,43 +606,26 @@ When making recommendations, consider all your combined perspectives and offer p
       ? { latitude: location.coords.latitude, longitude: location.coords.longitude }
       : undefined;
 
-    const journeyPrompt = `You are creating an engaging walking tour guide. The user has planned this itinerary:
+    const journeyPrompt = `Create a walking tour guide for these San Francisco stops:
 
 ${placesDescription}
 
-CRITICAL REQUIREMENT: You MUST use your web_search tool to look up EACH place in the itinerary BEFORE writing any fun facts. Do NOT rely on your training data - search for current, accurate information about each location. This is mandatory.
+STEP 1: Use ONE web_search to research ALL places at once. Search query example: "${itinerary.map(p => p.name).join(', ')} San Francisco interesting facts"
 
-For each place in the itinerary:
-1. First, call web_search with the place name and city to get real, verified information
-2. Use ONLY facts from your search results - never make up or assume facts
-
-Generate a detailed journey guide with:
-1. An exciting introduction to set the mood
-2. For each place: 2-3 VERIFIED fun facts from your web search and how it connects to the next destination
-3. For walks between places: interesting things to look for (architecture styles, street art, local culture, historical buildings, etc.)
-
-Respond with this exact JSON format:
+STEP 2: After getting search results, output this JSON format ONLY (no other text):
 {
-  "title": "A catchy title for this journey",
-  "introduction": "An engaging 2-3 sentence introduction that gets the user excited",
+  "title": "Creative tour title",
+  "introduction": "2-3 exciting sentences about the journey",
   "steps": [
-    {
-      "type": "place",
-      "placeIndex": 0,
-      "funFacts": ["Fun fact 1", "Fun fact 2"],
-      "connectionToNext": "How this place connects to the next (if not last stop)"
-    },
-    {
-      "type": "walking",
-      "fromIndex": 0,
-      "toIndex": 1,
-      "walkingDescription": "What to look for while walking - architecture, murals, street life, etc."
-    }
+    {"type": "place", "placeIndex": 0, "funFacts": ["Real fact from web search", "Another verified fact"], "connectionToNext": "How this connects to next stop"}
   ],
-  "totalTime": "Estimated total time including walks and visits"
+  "totalTime": "2-3 hours"
 }
 
-Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
+For EACH place (index 0 to ${itinerary.length - 1}), add a "place" step AND a "walking" step to the next location.
+Walking step format: {"type": "walking", "fromIndex": 0, "toIndex": 1, "walkingDescription": "What to see while walking"}
+
+Use facts from your web search. Output ONLY the JSON after searching.`;
 
     const response = await sendAgentMessage(
       'You are an enthusiastic local tour guide who knows fascinating stories about every corner of the city.',
@@ -654,7 +637,20 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
 
     if (response.success && response.message) {
       try {
-        const parsed = JSON.parse(response.message);
+        // Clean up common AI quirks: remove markdown formatting from JSON
+        let cleanedMessage = response.message
+          .replace(/\*\*/g, '')  // Remove bold markers
+          .replace(/\*/g, '')    // Remove italic markers
+          .replace(/\\n/g, ' ')  // Replace escaped newlines with spaces
+          .trim();
+        
+        // Try to extract JSON if wrapped in other content
+        const jsonMatch = cleanedMessage.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          cleanedMessage = jsonMatch[0];
+        }
+        
+        const parsed = JSON.parse(cleanedMessage);
         
         // Transform the parsed response to include actual place data
         const steps: JourneyStep[] = [];
@@ -1249,7 +1245,7 @@ Alternate between 'place' and 'walking' steps. Only respond with valid JSON.`;
                 <>
                   <Text style={styles.responseText}>{agentResponse.message}</Text>
                   
-                  {agentResponse.places.length > 0 && (
+                  {agentResponse.places && agentResponse.places.length > 0 && (
                     <View style={styles.placesContainer}>
                       <Text style={styles.placesTitle}>
                         Tap to select places for your itinerary

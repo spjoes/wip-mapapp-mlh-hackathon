@@ -103,8 +103,62 @@ IMPORTANT:
     
     const assistantMessage = data.choices?.[0]?.message?.content;
 
-    if (assistantMessage) {
+    if (assistantMessage && assistantMessage.trim().length > 0) {
+      // Check if AI returned a search query instead of the expected output
+      // This happens when the reasoning model gets stuck trying to call web_search
+      const trimmed = assistantMessage.trim();
+      if (trimmed.startsWith('{') && (
+        trimmed.includes('"search_query"') || 
+        trimmed.includes('"type": "search"') ||
+        trimmed.includes('"type":"search"')
+      )) {
+        console.warn('AI returned search request instead of final output:', trimmed);
+        
+        // Check if web_search was actually called and returned results
+        const functionDetails = data.functions?.function_details;
+        if (functionDetails && functionDetails.length > 0) {
+          // Web search was called - try to extract useful info from the search summary
+          const lastSearch = functionDetails[functionDetails.length - 1];
+          if (lastSearch?.result?.summary) {
+            console.log('Using search summary as fallback:', lastSearch.result.summary);
+            // Return the summary so the app can show something useful
+            return { 
+              success: false, 
+              error: `Search results: ${lastSearch.result.summary}. Please try again - the AI couldn't complete the response.`
+            };
+          }
+        }
+        
+        return { 
+          success: false, 
+          error: 'AI is trying to search. Please try again.' 
+        };
+      }
+      
       return { success: true, message: assistantMessage };
+    }
+
+    // Check if the model got stuck in "reasoning" mode (empty content but has reasoning)
+    const reasoningContent = data.choices?.[0]?.message?.reasoning_content;
+    if (reasoningContent) {
+      console.warn('AI returned reasoning but no final output - model stuck in thinking mode');
+      
+      // Check if web_search was called and has results we can use
+      const functionDetails = data.functions?.function_details;
+      if (functionDetails && functionDetails.length > 0) {
+        const lastSearch = functionDetails[functionDetails.length - 1];
+        if (lastSearch?.result?.summary) {
+          return { 
+            success: false, 
+            error: `Search found: ${lastSearch.result.summary}. Please try again.`
+          };
+        }
+      }
+      
+      return { 
+        success: false, 
+        error: 'AI is still thinking. Please try again.' 
+      };
     }
 
     return { success: false, error: 'No response from agent' };
